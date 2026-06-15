@@ -5,6 +5,10 @@ namespace CowPilot;
 
 sealed class MainForm : Form
 {
+    private static readonly Color ChangedColor = Color.FromArgb(255, 193, 7);
+    private static readonly Color SuccessColor = Color.FromArgb(46, 125, 50);
+    private static readonly Color ErrorColor = Color.FromArgb(183, 28, 28);
+
     private readonly TextBox _measurements = new() { Multiline = true, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 10) };
     private readonly TextBox _formatted = new() { Multiline = true, ScrollBars = ScrollBars.Vertical, ReadOnly = true, Font = new Font("Consolas", 10) };
     private readonly TextBox _totalLf = ReadOnlyBox();
@@ -13,7 +17,7 @@ sealed class MainForm : Form
     private readonly Label _suggestedScrews = new() { Text = "Suggested: 0", AutoSize = true };
     private readonly Label _suggestedLapScrews = new() { Text = "Suggested: 0", AutoSize = true };
     private readonly Label _status = new() { Dock = DockStyle.Fill, Height = 24, BorderStyle = BorderStyle.Fixed3D, Text = "Ready" };
-    private readonly Label _centerOfBalance = new() { AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, BorderStyle = BorderStyle.Fixed3D };
+    private readonly Label _centerOfBalance = new() { AutoSize = false, Height = 34, MinimumSize = new Size(240, 34), TextAlign = ContentAlignment.MiddleLeft, BorderStyle = BorderStyle.Fixed3D };
     private readonly CheckBox _useSuggested = new() { Text = "Use suggested screws", AutoSize = true };
     private readonly CheckBox _militaryDiscount = new() { Text = "Military discount", AutoSize = true };
     private readonly RadioButton[] _screwButtons;
@@ -113,7 +117,13 @@ sealed class MainForm : Form
     private ToolStrip BuildToolBar()
     {
         var toolbar = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden };
-        var save = new ToolStripButton("Save") { ToolTipText = "Quick Save" };
+        var save = new ToolStripButton
+        {
+            DisplayStyle = ToolStripItemDisplayStyle.Image,
+            Image = BuildSaveIcon(),
+            Text = "Quick Save",
+            ToolTipText = "Quick Save"
+        };
         save.Click += (_, _) => QuickSave();
         toolbar.Items.Add(save);
         return toolbar;
@@ -122,37 +132,39 @@ sealed class MainForm : Form
     private TabPage BuildQuoteTab()
     {
         var page = new TabPage("Calculator");
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 2, Padding = new Padding(8) };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 3, Padding = new Padding(8) };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 70));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 30));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 52));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 26));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 22));
         page.Controls.Add(root);
 
         root.Controls.Add(Group("Measurements", _measurements), 0, 0);
+        root.SetRowSpan(_measurements.Parent!, 2);
         root.Controls.Add(Group("Formatted Output", _formatted), 1, 0);
-        root.Controls.Add(BuildInputsPanel(), 2, 0);
-        root.Controls.Add(BuildPricesPanel(), 3, 0);
-        root.Controls.Add(BuildInfoPanel(), 0, 1);
-        root.SetColumnSpan(root.GetControlFromPosition(0, 1)!, 2);
-        root.Controls.Add(BuildMiscPanel(), 2, 1);
-        root.SetColumnSpan(root.GetControlFromPosition(2, 1)!, 2);
+        root.SetRowSpan(_formatted.Parent!, 2);
+        root.Controls.Add(BuildScrewsPanel(), 2, 0);
+        root.Controls.Add(BuildTrimPanel(), 2, 1);
+        root.Controls.Add(BuildMiscPanel(), 3, 0);
+        root.SetRowSpan(root.GetControlFromPosition(3, 0)!, 2);
+        root.Controls.Add(BuildInfoPanel(), 0, 2);
+        root.SetColumnSpan(root.GetControlFromPosition(0, 2)!, 2);
+        root.Controls.Add(BuildCobPanel(), 2, 2);
+        root.Controls.Add(BuildPricesPanel(), 3, 2);
         return page;
     }
 
-    private Control BuildInputsPanel()
+    private Control BuildScrewsPanel()
     {
-        var panel = Stack();
-        panel.Controls.Add(Group("Screws", Stack(_screwButtons.Cast<Control>().Concat([
+        return Group("Screws", Stack(_screwButtons.Cast<Control>().Concat([
             _useSuggested,
             Row("Total LF", _totalLf),
             Row("Screw bags", _screwBags, _suggestedScrews),
             Row("Lap bags", _lapScrewBags, _suggestedLapScrews)
-        ]).ToArray())));
-        panel.Controls.Add(BuildTrimPanel());
-        return panel;
+        ]).ToArray()));
     }
 
     private Control BuildTrimPanel()
@@ -179,52 +191,69 @@ sealed class MainForm : Form
 
     private Control BuildPricesPanel()
     {
-        var panel = Stack();
-        var prices = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 3 };
+        var prices = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 5, Padding = new Padding(4) };
+        prices.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32));
         prices.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
-        prices.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33));
-        prices.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33));
+        prices.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
+        for (int i = 0; i < 5; i++) prices.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
         prices.Controls.Add(new Label(), 0, 0);
-        prices.Controls.Add(new Label { Text = "Subtotal", AutoSize = true }, 1, 0);
-        prices.Controls.Add(new Label { Text = "Grand Total", AutoSize = true }, 2, 0);
+        prices.Controls.Add(new Label { Text = "Subtotal", AutoSize = true, Font = BoldFont(10) }, 1, 0);
+        prices.Controls.Add(new Label { Text = "Grand Total", AutoSize = true, Font = BoldFont(10) }, 2, 0);
         int row = 1;
         foreach (MetalOption metal in Enum.GetValues<MetalOption>())
         {
-            _subtotalBoxes[metal] = ReadOnlyBox();
-            _grandTotalBoxes[metal] = ReadOnlyBox();
-            prices.Controls.Add(new Label { Text = QuoteCalculator.MetalLabel(metal), AutoSize = true }, 0, row);
+            _subtotalBoxes[metal] = PriceBox();
+            _grandTotalBoxes[metal] = PriceBox();
+            prices.Controls.Add(new Label { Text = QuoteCalculator.MetalLabel(metal), AutoSize = true, Anchor = AnchorStyles.Left, Font = BoldFont(10) }, 0, row);
             prices.Controls.Add(_subtotalBoxes[metal], 1, row);
             prices.Controls.Add(_grandTotalBoxes[metal], 2, row);
             row++;
         }
-        panel.Controls.Add(prices);
-        panel.Controls.Add(_militaryDiscount);
-        var cobPanel = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2 };
+        return Group("Prices", prices);
+    }
+
+    private Control BuildCobPanel()
+    {
+        var panel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(4) };
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        panel.Controls.Add(_militaryDiscount, 0, 0);
+
+        var cobPanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
         var copy = new Button { Text = "Copy COB", AutoSize = true };
-        copy.Click += (_, _) => Clipboard.SetText(_centerOfBalance.Text);
+        copy.Click += (_, _) =>
+        {
+            if (!string.IsNullOrWhiteSpace(_centerOfBalance.Text)) Clipboard.SetText(_centerOfBalance.Text);
+        };
         cobPanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         cobPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         cobPanel.Controls.Add(copy, 0, 0);
         cobPanel.Controls.Add(_centerOfBalance, 1, 0);
-        panel.Controls.Add(cobPanel);
-        return Group("Prices", panel);
+        panel.Controls.Add(cobPanel, 0, 1);
+        return Group("Balance", panel);
     }
 
     private Control BuildInfoPanel()
     {
-        var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 2 };
+        var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 3 };
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 65));
+        grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         grid.Controls.Add(new Label { Text = "Customer", AutoSize = true }, 0, 0);
         grid.Controls.Add(_customer, 1, 0);
         grid.Controls.Add(new Label { Text = "Phone", AutoSize = true }, 2, 0);
         grid.Controls.Add(_phone, 3, 0);
         grid.Controls.Add(new Label { Text = "Color", AutoSize = true }, 0, 1);
         grid.Controls.Add(_color, 1, 1);
-        grid.Controls.Add(new Label { Text = "Notes", AutoSize = true }, 2, 1);
-        grid.Controls.Add(_notes, 3, 1);
+        grid.Controls.Add(new Label { Text = "Notes", AutoSize = true }, 0, 2);
+        _notes.MinimumSize = new Size(0, 70);
+        grid.Controls.Add(_notes, 1, 2);
+        grid.SetColumnSpan(_notes, 3);
         return Group("Quote Info", grid);
     }
 
@@ -308,18 +337,14 @@ sealed class MainForm : Form
             _centerOfBalance.Text = _lastQuote.GroupedPanels.Count == 0
                 ? ""
                 : $"Center of Balance: {Num(_lastQuote.CenterOfBalance)}\"";
-            _status.BackColor = SystemColors.Control;
-            _status.ForeColor = SystemColors.ControlText;
-            _status.Text = "Quote recalculated.";
+            SetStatus("Quote recalculated.", SuccessColor, Color.White);
             HighlightSelectedScrew();
             LogDebug("Quote recalculated.");
         }
         catch (Exception ex)
         {
             _lastQuote = null;
-            _status.BackColor = Color.Firebrick;
-            _status.ForeColor = Color.White;
-            _status.Text = ex.Message;
+            SetStatus(ex.Message, ErrorColor, Color.White);
             LogDebug("Calculation error: " + ex.Message);
         }
     }
@@ -411,7 +436,7 @@ sealed class MainForm : Form
             _customer.Text, _phone.Text, _color.Text, _notes.Text, CurrentInput());
         File.WriteAllText(path, QuoteSaveLoad.CreateEstimateText(doc, _lastQuote!));
         ResetSavedSnapshot();
-        _status.Text = $"Saved: {path}";
+        SetStatus($"Saved: {path}", SuccessColor, Color.White);
         LogDebug("Saved quote: " + path);
     }
 
@@ -518,7 +543,16 @@ sealed class MainForm : Form
 
     private static void SetChanged(Control control, bool changed)
     {
-        control.BackColor = changed ? Color.FromArgb(255, 249, 196) : SystemColors.Window;
+        Color normal = control is TextBox or NumericUpDown ? SystemColors.Window : SystemColors.Control;
+        control.BackColor = changed ? ChangedColor : normal;
+        if (control is CheckBox checkBox) checkBox.UseVisualStyleBackColor = !changed;
+    }
+
+    private void SetStatus(string text, Color backColor, Color foreColor)
+    {
+        _status.Text = text;
+        _status.BackColor = backColor;
+        _status.ForeColor = foreColor;
     }
 
     private void ShowConsole()
@@ -598,7 +632,31 @@ sealed class MainForm : Form
     }
 
     private static TextBox ReadOnlyBox() => new() { ReadOnly = true, TextAlign = HorizontalAlignment.Right };
+    private static TextBox PriceBox() => new()
+    {
+        ReadOnly = true,
+        TextAlign = HorizontalAlignment.Right,
+        Dock = DockStyle.Fill,
+        Font = BoldFont(12),
+        MinimumSize = new Size(125, 32)
+    };
+
     private static NumericUpDown CountBox(decimal minimum = 0) => new() { Minimum = minimum, Maximum = 100000, Width = 58, TextAlign = HorizontalAlignment.Right };
+    private static Font BoldFont(float size) => new("Segoe UI", size, FontStyle.Bold);
+    private static Image BuildSaveIcon()
+    {
+        var image = new Bitmap(16, 16);
+        using var g = Graphics.FromImage(image);
+        g.Clear(Color.Transparent);
+        using var body = new SolidBrush(Color.FromArgb(25, 118, 210));
+        using var label = new SolidBrush(Color.White);
+        using var dark = new SolidBrush(Color.FromArgb(13, 71, 161));
+        g.FillRectangle(body, 2, 1, 12, 14);
+        g.FillRectangle(label, 4, 3, 7, 4);
+        g.FillRectangle(dark, 5, 10, 7, 4);
+        g.DrawRectangle(Pens.Black, 2, 1, 12, 14);
+        return image;
+    }
     private static string Num(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
     private static string Money(double value) => value.ToString("C", CultureInfo.GetCultureInfo("en-US"));
 }
