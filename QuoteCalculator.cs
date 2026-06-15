@@ -191,6 +191,7 @@ static class QuoteCalculator
             + trim.Valleys * (27 + extra)
             + trim.Transitions * (23 + extra)
             + trim.JTrim * (18 + extra)
+            + trim.DeluxeCorners * (25 + extra)
             + trim.TotalExtraInches * CustomTrimExtraInchRate;
     }
 

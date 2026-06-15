@@ -5,9 +5,10 @@ namespace CowPilot;
 
 sealed class MainForm : Form
 {
-    private static readonly Color ChangedColor = Color.FromArgb(255, 193, 7);
+    private static readonly Color ChangedColor = Color.FromArgb(191, 113, 0);
     private static readonly Color SuccessColor = Color.FromArgb(46, 125, 50);
     private static readonly Color ErrorColor = Color.FromArgb(183, 28, 28);
+    private static readonly Color CalculatingColor = Color.DimGray;
 
     private readonly TextBox _measurements = new() { Multiline = true, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 10) };
     private readonly TextBox _formatted = new() { Multiline = true, ScrollBars = ScrollBars.Vertical, ReadOnly = true, Font = new Font("Consolas", 10) };
@@ -18,6 +19,7 @@ sealed class MainForm : Form
     private readonly Label _suggestedLapScrews = new() { Text = "Suggested: 0", AutoSize = true };
     private readonly Label _status = new() { Dock = DockStyle.Fill, Height = 24, BorderStyle = BorderStyle.Fixed3D, Text = "Ready" };
     private readonly Label _centerOfBalance = new() { AutoSize = false, Height = 34, MinimumSize = new Size(240, 34), TextAlign = ContentAlignment.MiddleLeft, BorderStyle = BorderStyle.Fixed3D };
+    private readonly Label _weight = new() { AutoSize = false, Height = 34, MinimumSize = new Size(240, 34), TextAlign = ContentAlignment.MiddleLeft, BorderStyle = BorderStyle.Fixed3D };
     private readonly CheckBox _useSuggested = new() { Text = "Use suggested screws", AutoSize = true };
     private readonly CheckBox _militaryDiscount = new() { Text = "Military discount", AutoSize = true };
     private readonly RadioButton[] _screwButtons;
@@ -39,6 +41,7 @@ sealed class MainForm : Form
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 650 };
     private readonly DebugConsoleForm _console = new();
     private QuoteSet? _lastQuote;
+    private string _centerOfBalanceClipboardText = "";
     private string _savedSnapshot = "";
     private bool _isDirty;
     private bool _suppress;
@@ -146,8 +149,8 @@ sealed class MainForm : Form
         root.SetRowSpan(_measurements.Parent!, 2);
         root.Controls.Add(Group("Formatted Output", _formatted), 1, 0);
         root.SetRowSpan(_formatted.Parent!, 2);
-        root.Controls.Add(BuildScrewsPanel(), 2, 0);
-        root.Controls.Add(BuildTrimPanel(), 2, 1);
+        root.Controls.Add(BuildTrimPanel(), 2, 0);
+        root.Controls.Add(BuildScrewsPanel(), 2, 1);
         root.Controls.Add(BuildMiscPanel(), 3, 0);
         root.SetRowSpan(root.GetControlFromPosition(3, 0)!, 2);
         root.Controls.Add(BuildInfoPanel(), 0, 2);
@@ -177,7 +180,7 @@ sealed class MainForm : Form
         grid.Controls.Add(new Label { Text = "Qty", AutoSize = true }, 1, 0);
         grid.Controls.Add(new Label { Text = "Extra in.", AutoSize = true }, 2, 0);
 
-        string[] names = ["Ridges", "Eaves", "Gables", "Valleys", "Sidewalls", "Endwalls", "Transitions", "J-Trim"];
+        string[] names = ["Ridges", "Deluxe Corners", "Eaves", "Gables", "Valleys", "Sidewalls", "Endwalls", "Transitions", "J-Trim"];
         for (int i = 0; i < names.Length; i++)
         {
             _trimCounts[names[i]] = CountBox();
@@ -224,13 +227,14 @@ sealed class MainForm : Form
         var copy = new Button { Text = "Copy COB", AutoSize = true };
         copy.Click += (_, _) =>
         {
-            if (!string.IsNullOrWhiteSpace(_centerOfBalance.Text)) Clipboard.SetText(_centerOfBalance.Text);
+            if (!string.IsNullOrWhiteSpace(_centerOfBalanceClipboardText)) Clipboard.SetText(_centerOfBalanceClipboardText);
         };
         cobPanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         cobPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         cobPanel.Controls.Add(copy, 0, 0);
         cobPanel.Controls.Add(_centerOfBalance, 1, 0);
         panel.Controls.Add(cobPanel, 0, 1);
+        panel.Controls.Add(_weight, 0, 2);
         return Group("Balance", panel);
     }
 
@@ -314,6 +318,7 @@ sealed class MainForm : Form
     private void Recalculate()
     {
         if (_suppress) return;
+        SetStatus("Calculating...", CalculatingColor, Color.White);
         try
         {
             var input = CurrentInput();
@@ -334,9 +339,18 @@ sealed class MainForm : Form
                 _subtotalBoxes[result.Metal].Text = Money(result.Subtotal);
                 _grandTotalBoxes[result.Metal].Text = Money(result.GrandTotal);
             }
-            _centerOfBalance.Text = _lastQuote.GroupedPanels.Count == 0
-                ? ""
-                : $"Center of Balance: {Num(_lastQuote.CenterOfBalance)}\"";
+            if (_lastQuote.GroupedPanels.Count == 0)
+            {
+                _centerOfBalanceClipboardText = "";
+                _centerOfBalance.Text = "";
+                _weight.Text = "";
+            }
+            else
+            {
+                _centerOfBalanceClipboardText = $"{Num(_lastQuote.CenterOfBalance)}\"";
+                _centerOfBalance.Text = $"Center of Balance: {_centerOfBalanceClipboardText}";
+                _weight.Text = $"Weight: 29ga {Num(_lastQuote.Quotes[MetalOption.Galv29].TotalWeight)} lb | 26ga {Num(_lastQuote.Quotes[MetalOption.Galv26].TotalWeight)} lb";
+            }
             SetStatus("Quote recalculated.", SuccessColor, Color.White);
             HighlightSelectedScrew();
             LogDebug("Quote recalculated.");
@@ -362,7 +376,9 @@ sealed class MainForm : Form
 
     private TrimSelection CurrentTrim() => new(
         Count("Ridges"), Count("Gables"), Count("Eaves"), Count("Endwalls"), Count("Sidewalls"), Count("Valleys"), Count("Transitions"), Count("J-Trim"),
-        Extra("Ridges"), Extra("Gables"), Extra("Eaves"), Extra("Endwalls"), Extra("Sidewalls"), Extra("Valleys"), Extra("Transitions"), Extra("J-Trim"));
+        Count("Deluxe Corners"),
+        Extra("Ridges"), Extra("Gables"), Extra("Eaves"), Extra("Endwalls"), Extra("Sidewalls"), Extra("Valleys"), Extra("Transitions"), Extra("J-Trim"),
+        Extra("Deluxe Corners"));
 
     private MiscSelection CurrentMisc() => new((int)_miscCounts[0].Value, (int)_miscCounts[1].Value, (int)_miscCounts[2].Value,
         (int)_miscCounts[3].Value, (int)_miscCounts[4].Value, (int)_miscCounts[5].Value, _bootCounts.Select(n => (int)n.Value).ToArray());
@@ -396,6 +412,7 @@ sealed class MainForm : Form
         SetTrimValue("Valleys", trim.Valleys, trim.ValleysExtraInches);
         SetTrimValue("Transitions", trim.Transitions, trim.TransitionsExtraInches);
         SetTrimValue("J-Trim", trim.JTrim, trim.JTrimExtraInches);
+        SetTrimValue("Deluxe Corners", trim.DeluxeCorners, trim.DeluxeCornersExtraInches);
     }
 
     private void SetMisc(MiscSelection misc)
@@ -501,8 +518,10 @@ sealed class MainForm : Form
     private void MarkDirty()
     {
         if (_suppress) return;
+        UpdateTrimExtraAvailability();
         _isDirty = CurrentSnapshot() != _savedSnapshot;
         UpdateChangedHighlights();
+        SetStatus("Calculating...", CalculatingColor, Color.White);
         _timer.Stop();
         _timer.Start();
     }
@@ -510,6 +529,7 @@ sealed class MainForm : Form
     private void ResetSavedSnapshot()
     {
         _timer.Stop();
+        UpdateTrimExtraAvailability();
         _savedSnapshot = CurrentSnapshot();
         _isDirty = false;
         UpdateChangedHighlights();
@@ -544,8 +564,25 @@ sealed class MainForm : Form
     private static void SetChanged(Control control, bool changed)
     {
         Color normal = control is TextBox or NumericUpDown ? SystemColors.Window : SystemColors.Control;
-        control.BackColor = changed ? ChangedColor : normal;
+        control.BackColor = normal;
+        control.ForeColor = changed ? ChangedColor : SystemColors.ControlText;
         if (control is CheckBox checkBox) checkBox.UseVisualStyleBackColor = !changed;
+    }
+
+    private void UpdateTrimExtraAvailability()
+    {
+        bool oldSuppress = _suppress;
+        _suppress = true;
+        try
+        {
+            foreach (var pair in _trimExtras)
+            {
+                bool enabled = _trimCounts[pair.Key].Value > 0;
+                pair.Value.Enabled = enabled;
+                if (!enabled && pair.Value.Value != 0) pair.Value.Value = 0;
+            }
+        }
+        finally { _suppress = oldSuppress; }
     }
 
     private void SetStatus(string text, Color backColor, Color foreColor)

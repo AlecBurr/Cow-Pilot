@@ -29,6 +29,7 @@ sealed record TrimSelection(
     int Valleys,
     int Transitions,
     int JTrim,
+    int DeluxeCorners,
     double RidgesExtraInches,
     double GablesExtraInches,
     double EavesExtraInches,
@@ -36,17 +37,18 @@ sealed record TrimSelection(
     double SidewallsExtraInches,
     double ValleysExtraInches,
     double TransitionsExtraInches,
-    double JTrimExtraInches)
+    double JTrimExtraInches,
+    double DeluxeCornersExtraInches)
 {
-    public static TrimSelection Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    public static TrimSelection Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
     [JsonIgnore]
     public double TotalExtraInches => RidgesExtraInches + GablesExtraInches + EavesExtraInches + EndwallsExtraInches
-        + SidewallsExtraInches + ValleysExtraInches + TransitionsExtraInches + JTrimExtraInches;
+        + SidewallsExtraInches + ValleysExtraInches + TransitionsExtraInches + JTrimExtraInches + DeluxeCornersExtraInches;
 
     [JsonIgnore]
     public bool HasItems => Ridges > 0 || Gables > 0 || Eaves > 0 || Endwalls > 0 || Sidewalls > 0
-        || Valleys > 0 || Transitions > 0 || JTrim > 0 || TotalExtraInches > 0;
+        || Valleys > 0 || Transitions > 0 || JTrim > 0 || DeluxeCorners > 0 || TotalExtraInches > 0;
 }
 
 sealed record MiscSelection(

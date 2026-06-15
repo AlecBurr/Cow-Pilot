@@ -79,6 +79,7 @@ static class QuoteSaveLoad
         AppendTrimLine(sb, trim.Sidewalls, trim.SidewallsExtraInches, "Sidewalls", nl);
         AppendTrimLine(sb, trim.Transitions, trim.TransitionsExtraInches, "Transitions", nl);
         AppendTrimLine(sb, trim.JTrim, trim.JTrimExtraInches, "J-Trim", nl);
+        AppendTrimLine(sb, trim.DeluxeCorners, trim.DeluxeCornersExtraInches, "Deluxe Corners", nl);
         if (trim.TotalExtraInches > 0)
         {
             sb.Append("Extra Trim Inches Cost: ").Append(Money(trim.TotalExtraInches * QuoteCalculator.CustomTrimExtraInchRate))

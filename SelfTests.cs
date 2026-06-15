@@ -16,7 +16,7 @@ static class SelfTests
             "",
             "",
             false,
-            TrimSelection.Empty with { Ridges = 1, EavesExtraInches = 6 },
+            TrimSelection.Empty with { Ridges = 1, DeluxeCorners = 1, Eaves = 1, EavesExtraInches = 6 },
             misc,
             new CustomTrimState([new CustomTrimPieceState(2, [new PointF(0, 0), new PointF(3, 0), new PointF(3, 3)])], 64, 0, 0, 0.125f, 1));
 
@@ -24,6 +24,7 @@ static class SelfTests
         Assert(quote.GroupedPanels[150] == 1 && quote.GroupedPanels[120] == 2, "grouped panels");
         Assert(quote.Quotes[MetalOption.Galv29].GrandTotal > 0, "quote total");
         Assert(quote.CustomTrimPrice > 0, "custom trim price");
+        Assert(quote.Quotes[MetalOption.Galv29].TotalWeight > 0, "quote weight");
 
         var document = new QuoteDocument(AppVersion.SaveFormatVersion, AppVersion.Version, "06/15/2026 12:00:00",
             "Test Customer", "555-0100", "Red", "Round trip", input);

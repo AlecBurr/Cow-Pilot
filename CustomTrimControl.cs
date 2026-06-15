@@ -27,6 +27,7 @@ sealed class CustomTrimControl : Control
         BackColor = Color.White;
         ForeColor = Color.Black;
         Dock = DockStyle.Fill;
+        TabStop = true;
     }
 
     public int SelectedQuantity
@@ -166,6 +167,17 @@ sealed class CustomTrimControl : Control
     {
         base.OnMouseWheel(e);
         Zoom(e.Delta > 0 ? 1.1f : 0.9f);
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Control && e.KeyCode == Keys.Z)
+        {
+            Undo();
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+        }
     }
 
     protected override void OnPaint(PaintEventArgs e)
