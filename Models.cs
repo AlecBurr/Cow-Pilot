@@ -73,6 +73,8 @@ sealed class CustomTrimPieceState(int quantity, List<PointF> vertices)
 {
     public int Quantity { get; set; } = quantity;
     public List<PointF> Vertices { get; set; } = vertices;
+    public int? ColorArgb { get; set; }
+    public int OriginIndex { get; set; }
 }
 
 sealed record CustomTrimState(

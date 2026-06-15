@@ -10,8 +10,10 @@ static class QuoteSaveLoad
     private const string BlockEnd = "--- End Cow Pilot Load Data ---";
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    public static string CreateEstimateText(QuoteDocument document, QuoteSet quote)
+    public static string CreateEstimateText(QuoteDocument document, QuoteSet quote, PriceSettings? priceSettings = null)
     {
+        PriceSettings prices = priceSettings ?? new PriceSettings();
+        prices.Normalize();
         var sb = new StringBuilder();
         string nl = "\r\n";
         sb.Append("Cow Pilot Estimate").Append(nl);
@@ -30,11 +32,11 @@ static class QuoteSaveLoad
                 .Append(" | Grand Total: ").Append(Money(result.GrandTotal))
                 .Append(nl);
         }
-        if (quote.MilitaryDiscountApplied) sb.Append("Military Discount: 5%").Append(nl);
+        if (quote.MilitaryDiscountApplied) sb.Append("Military Discount: ").Append(Num(prices.MilitaryDiscountRate * 100)).Append("%").Append(nl);
         sb.Append(nl);
 
-        AppendTrim(sb, quote.Trim, nl);
-        AppendCustomTrim(sb, document.Input.CustomTrim, nl);
+        AppendTrim(sb, quote.Trim, nl, prices);
+        AppendCustomTrim(sb, document.Input.CustomTrim, nl, prices);
         AppendScrews(sb, quote, nl);
         AppendMisc(sb, quote.Misc, nl);
 
@@ -67,28 +69,28 @@ static class QuoteSaveLoad
         return document;
     }
 
-    private static void AppendTrim(StringBuilder sb, TrimSelection trim, string nl)
+    private static void AppendTrim(StringBuilder sb, TrimSelection trim, string nl, PriceSettings prices)
     {
         if (!trim.HasItems) return;
         sb.Append("Trim:").Append(nl);
-        AppendTrimLine(sb, trim.Eaves, trim.EavesExtraInches, "Eaves", nl);
-        AppendTrimLine(sb, trim.Ridges, trim.RidgesExtraInches, "Ridges", nl);
-        AppendTrimLine(sb, trim.Gables, trim.GablesExtraInches, "Gables", nl);
-        AppendTrimLine(sb, trim.Valleys, trim.ValleysExtraInches, "Valleys", nl);
-        AppendTrimLine(sb, trim.Endwalls, trim.EndwallsExtraInches, "Endwalls", nl);
-        AppendTrimLine(sb, trim.Sidewalls, trim.SidewallsExtraInches, "Sidewalls", nl);
-        AppendTrimLine(sb, trim.Transitions, trim.TransitionsExtraInches, "Transitions", nl);
-        AppendTrimLine(sb, trim.JTrim, trim.JTrimExtraInches, "J-Trim", nl);
-        AppendTrimLine(sb, trim.DeluxeCorners, trim.DeluxeCornersExtraInches, "Deluxe Corners", nl);
+        AppendTrimLine(sb, trim.Eaves, trim.EavesExtraInches, "Eaves", nl, prices);
+        AppendTrimLine(sb, trim.Ridges, trim.RidgesExtraInches, "Ridges", nl, prices);
+        AppendTrimLine(sb, trim.Gables, trim.GablesExtraInches, "Gables", nl, prices);
+        AppendTrimLine(sb, trim.Valleys, trim.ValleysExtraInches, "Valleys", nl, prices);
+        AppendTrimLine(sb, trim.Endwalls, trim.EndwallsExtraInches, "Endwalls", nl, prices);
+        AppendTrimLine(sb, trim.Sidewalls, trim.SidewallsExtraInches, "Sidewalls", nl, prices);
+        AppendTrimLine(sb, trim.Transitions, trim.TransitionsExtraInches, "Transitions", nl, prices);
+        AppendTrimLine(sb, trim.JTrim, trim.JTrimExtraInches, "J-Trim", nl, prices);
+        AppendTrimLine(sb, trim.DeluxeCorners, trim.DeluxeCornersExtraInches, "Deluxe Corners", nl, prices);
         if (trim.TotalExtraInches > 0)
         {
-            sb.Append("Extra Trim Inches Cost: ").Append(Money(trim.TotalExtraInches * QuoteCalculator.CustomTrimExtraInchRate))
-                .Append(" (").Append(Num(trim.TotalExtraInches)).Append("\" @ ").Append(Money(QuoteCalculator.CustomTrimExtraInchRate)).Append("/in)").Append(nl);
+            sb.Append("Extra Trim Inches Cost: ").Append(Money(trim.TotalExtraInches * prices.StandardTrimExtraInchRate))
+                .Append(" (").Append(Num(trim.TotalExtraInches)).Append("\" @ ").Append(Money(prices.StandardTrimExtraInchRate)).Append("/in)").Append(nl);
         }
         sb.Append(nl);
     }
 
-    private static void AppendCustomTrim(StringBuilder sb, CustomTrimState customTrim, string nl)
+    private static void AppendCustomTrim(StringBuilder sb, CustomTrimState customTrim, string nl, PriceSettings prices)
     {
         var pieces = customTrim.Pieces.Where(p => p.Vertices.Count > 1).ToList();
         if (pieces.Count == 0) return;
@@ -101,10 +103,11 @@ static class QuoteSaveLoad
             sb.Append("Quantity: ").Append(piece.Quantity).Append(nl);
             sb.Append("Total Inches Each: ").Append(Num(length)).Append("\"").Append(nl);
             sb.Append("Bends Each: ").Append(QuoteCalculator.CustomTrimBends(piece)).Append(nl);
-            sb.Append("Unit Price: ").Append(Money(QuoteCalculator.CustomTrimUnitPrice(piece))).Append(nl);
-            sb.Append("Extended Price: ").Append(Money(QuoteCalculator.CustomTrimUnitPrice(piece) * piece.Quantity)).Append(nl).Append(nl);
+            double unitPrice = QuoteCalculator.CustomTrimUnitPrice(piece, prices);
+            sb.Append("Unit Price: ").Append(Money(unitPrice)).Append(nl);
+            sb.Append("Extended Price: ").Append(Money(unitPrice * piece.Quantity)).Append(nl).Append(nl);
         }
-        sb.Append("Total Custom Trim Price: ").Append(Money(QuoteCalculator.CustomTrimPrice(customTrim))).Append(nl).Append(nl);
+        sb.Append("Total Custom Trim Price: ").Append(Money(QuoteCalculator.CustomTrimPrice(customTrim, prices))).Append(nl).Append(nl);
     }
 
     private static void AppendScrews(StringBuilder sb, QuoteSet quote, string nl)
@@ -132,7 +135,7 @@ static class QuoteSaveLoad
         sb.Append(nl);
     }
 
-    private static void AppendTrimLine(StringBuilder sb, int count, double extraInches, string label, string nl)
+    private static void AppendTrimLine(StringBuilder sb, int count, double extraInches, string label, string nl, PriceSettings prices)
     {
         if (count <= 0 && extraInches <= 0) return;
         sb.Append(label).Append(": ");
@@ -140,7 +143,7 @@ static class QuoteSaveLoad
         if (extraInches > 0)
         {
             if (count > 0) sb.Append(", ");
-            sb.Append(Num(extraInches)).Append("\" extra @ ").Append(Money(QuoteCalculator.CustomTrimExtraInchRate)).Append("/in");
+            sb.Append(Num(extraInches)).Append("\" extra @ ").Append(Money(prices.StandardTrimExtraInchRate)).Append("/in");
         }
         sb.Append(nl);
     }

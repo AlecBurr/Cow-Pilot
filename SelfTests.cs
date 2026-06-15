@@ -26,9 +26,20 @@ static class SelfTests
         Assert(quote.CustomTrimPrice > 0, "custom trim price");
         Assert(quote.Quotes[MetalOption.Galv29].TotalWeight > 0, "quote weight");
 
+        var prices = new PriceSettings();
+        prices.Normalize();
+        prices.Metal(MetalOption.Galv29).LinearFootPrice = 100;
+        prices.StandardTrimExtraInchRate = 2;
+        prices.CustomTrimBendRate = 10;
+        prices.TaxRate = 0;
+        var customPriceQuote = QuoteCalculator.Calculate(input, prices);
+        Assert(customPriceQuote.Quotes[MetalOption.Galv29].Subtotal > quote.Quotes[MetalOption.Galv29].Subtotal, "custom metal price applied");
+        Assert(QuoteCalculator.CustomTrimUnitPrice(input.CustomTrim.Pieces[0], prices) > QuoteCalculator.CustomTrimUnitPrice(input.CustomTrim.Pieces[0]), "custom trim bend price applied");
+
         var document = new QuoteDocument(AppVersion.SaveFormatVersion, AppVersion.Version, "06/15/2026 12:00:00",
             "Test Customer", "555-0100", "Red", "Round trip", input);
-        var text = QuoteSaveLoad.CreateEstimateText(document, quote);
+        var text = QuoteSaveLoad.CreateEstimateText(document, customPriceQuote, prices);
+        Assert(text.Contains("$2.00/in", StringComparison.Ordinal), "custom extra-inch price saved");
         var loaded = QuoteSaveLoad.Load(text);
         Assert(loaded.FormatVersion == AppVersion.SaveFormatVersion, "load format version");
         Assert(loaded.Input.CustomTrim.Pieces[0].Quantity == 2, "custom trim quantity load");

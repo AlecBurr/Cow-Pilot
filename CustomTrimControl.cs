@@ -1,19 +1,26 @@
 using System.Globalization;
+using System.Drawing.Drawing2D;
 
 namespace CowPilot;
 
 sealed class CustomTrimControl : Control
 {
     private readonly List<CustomTrimPieceState> _pieces = [];
+    private readonly Random _random = new();
     private PointF? _drawingStart;
     private PointF? _previewPoint;
     private int _drawingPieceIndex = -1;
     private int _selectedPieceIndex = -1;
+    private int _movingPieceIndex = -1;
+    private PointF? _lastMovePoint;
     private Point? _panStart;
     private float _panStartOffsetX;
     private float _panStartOffsetY;
+    private PreferenceSettings _preferences = new();
+    private PriceSettings _prices = new();
 
     public event EventHandler? TrimChanged;
+    public event EventHandler? SelectionChanged;
 
     public float ZoomPixelsPerInch { get; private set; } = 64;
     public float OffsetX { get; private set; }
@@ -24,10 +31,31 @@ sealed class CustomTrimControl : Control
     public CustomTrimControl()
     {
         DoubleBuffered = true;
-        BackColor = Color.White;
-        ForeColor = Color.Black;
+        BackColor = Color.FromArgb(_preferences.CustomTrimBackgroundArgb);
+        ForeColor = Color.FromArgb(_preferences.CustomTrimLabelTextArgb);
         Dock = DockStyle.Fill;
         TabStop = true;
+    }
+
+    public int SelectedPieceIndex
+    {
+        get => _selectedPieceIndex;
+        set => SelectPiece(value);
+    }
+
+    public int PieceCount => _pieces.Count;
+    public IReadOnlyList<CustomTrimPieceState> Pieces => _pieces;
+    public IReadOnlyList<PointF> SelectedVertices => SelectedPiece?.Vertices is { } vertices ? vertices : Array.Empty<PointF>();
+
+    public int SelectedOriginIndex
+    {
+        get => SelectedPiece == null ? -1 : Math.Clamp(SelectedPiece.OriginIndex, 0, Math.Max(0, SelectedPiece.Vertices.Count - 1));
+        set
+        {
+            if (SelectedPiece == null || SelectedPiece.Vertices.Count == 0) return;
+            SelectedPiece.OriginIndex = Math.Clamp(value, 0, SelectedPiece.Vertices.Count - 1);
+            Changed();
+        }
     }
 
     public int SelectedQuantity
@@ -36,7 +64,9 @@ sealed class CustomTrimControl : Control
         set
         {
             if (SelectedPiece == null) return;
-            SelectedPiece.Quantity = Math.Max(1, value);
+            int quantity = Math.Max(1, value);
+            if (SelectedPiece.Quantity == quantity) return;
+            SelectedPiece.Quantity = quantity;
             Changed();
         }
     }
@@ -48,10 +78,22 @@ sealed class CustomTrimControl : Control
     public CustomTrimState State => new(_pieces.Where(p => p.Vertices.Count > 1).Select(CopyPiece).ToList(),
         ZoomPixelsPerInch, OffsetX, OffsetY, SnapInches, ColorSide);
 
+    public void ApplySettings(AppSettings settings)
+    {
+        settings.Normalize();
+        _preferences = settings.Preferences;
+        _prices = settings.Prices;
+        BackColor = Color.FromArgb(_preferences.CustomTrimBackgroundArgb);
+        ForeColor = Color.FromArgb(_preferences.CustomTrimLabelTextArgb);
+        foreach (var piece in _pieces) EnsurePieceColor(piece);
+        Invalidate();
+    }
+
     public void LoadState(CustomTrimState state)
     {
         _pieces.Clear();
         _pieces.AddRange(state.Pieces.Select(CopyPiece));
+        foreach (var piece in _pieces) EnsurePieceColor(piece);
         _selectedPieceIndex = _pieces.Count == 0 ? -1 : 0;
         _drawingPieceIndex = _selectedPieceIndex;
         _drawingStart = null;
@@ -66,12 +108,78 @@ sealed class CustomTrimControl : Control
 
     public void BeginNewPiece()
     {
-        _pieces.Add(new CustomTrimPieceState(1, []));
+        var piece = new CustomTrimPieceState(1, []);
+        EnsurePieceColor(piece);
+        _pieces.Add(piece);
         _selectedPieceIndex = _pieces.Count - 1;
         _drawingPieceIndex = _selectedPieceIndex;
         _drawingStart = null;
         _previewPoint = null;
         Changed();
+    }
+
+    public void SelectPiece(int index)
+    {
+        if (index < 0 || index >= _pieces.Count) return;
+        _selectedPieceIndex = index;
+        _drawingPieceIndex = index;
+        _drawingStart = null;
+        _previewPoint = null;
+        Invalidate();
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void AddVertex(PointF point)
+    {
+        if (SelectedPiece == null) BeginNewPiece();
+        SelectedPiece!.Vertices.Add(point);
+        SelectedPiece.OriginIndex = Math.Clamp(SelectedPiece.OriginIndex, 0, Math.Max(0, SelectedPiece.Vertices.Count - 1));
+        _drawingStart = point;
+        _drawingPieceIndex = _selectedPieceIndex;
+        Changed();
+    }
+
+    public void UpdateVertex(int index, PointF point)
+    {
+        if (SelectedPiece == null || index < 0 || index >= SelectedPiece.Vertices.Count) return;
+        SelectedPiece.Vertices[index] = point;
+        SelectedPiece.OriginIndex = Math.Clamp(SelectedPiece.OriginIndex, 0, Math.Max(0, SelectedPiece.Vertices.Count - 1));
+        _drawingStart = SelectedPiece.Vertices.LastOrDefault();
+        _drawingPieceIndex = _selectedPieceIndex;
+        Changed();
+    }
+
+    public void AddSegment(double length, double angleDegrees)
+    {
+        if (length <= 0) return;
+        if (SelectedPiece == null) BeginNewPiece();
+        if (SelectedPiece!.Vertices.Count == 0) SelectedPiece.Vertices.Add(new PointF(0, 0));
+        PointF start = SelectedPiece.Vertices[^1];
+        double radians = angleDegrees * Math.PI / 180.0;
+        var end = new PointF((float)(start.X + Math.Cos(radians) * length), (float)(start.Y + Math.Sin(radians) * length));
+        SelectedPiece.Vertices.Add(Snap(end));
+        _drawingStart = SelectedPiece.Vertices[^1];
+        _drawingPieceIndex = _selectedPieceIndex;
+        Changed();
+    }
+
+    public void AddBendSegment(double length, double bendDegrees)
+    {
+        if (SelectedPiece == null || SelectedPiece.Vertices.Count < 2)
+        {
+            AddSegment(length, bendDegrees);
+            return;
+        }
+        PointF previous = SelectedPiece.Vertices[^2];
+        PointF current = SelectedPiece.Vertices[^1];
+        double baseAngle = Math.Atan2(current.Y - previous.Y, current.X - previous.X) * 180.0 / Math.PI;
+        AddSegment(length, baseAngle + bendDegrees);
+    }
+
+    public void AddSegmentFromPitch(double length, double rise, double run)
+    {
+        if (run == 0) throw new InvalidOperationException("Pitch run cannot be zero.");
+        AddSegment(length, Math.Atan2(rise, run) * 180.0 / Math.PI);
     }
 
     public void Undo()
@@ -122,8 +230,9 @@ sealed class CustomTrimControl : Control
         double drawn = State.Pieces.Sum(QuoteCalculator.CustomTrimLength);
         double billed = State.Pieces.Sum(p => QuoteCalculator.CustomTrimLength(p) * p.Quantity);
         int bends = State.Pieces.Sum(p => QuoteCalculator.CustomTrimBends(p) * p.Quantity);
-        double price = QuoteCalculator.CustomTrimPrice(State);
-        return $"Drawn: {Num(drawn)}\"   Billed: {Num(billed)}\"   Bends: {bends}   Price: {Money(price)}";
+        double price = QuoteCalculator.CustomTrimPrice(State, _prices);
+        string warning = drawn > _prices.CustomTrimMaxInches ? $"   WARNING: above {Num(_prices.CustomTrimMaxInches)}\" max" : "";
+        return $"Drawn: {Num(drawn)}\"   Billed: {Num(billed)}\"   Bends: {bends}   Price: {Money(price)}{warning}";
     }
 
     protected override void OnMouseDown(MouseEventArgs e)
@@ -136,6 +245,19 @@ sealed class CustomTrimControl : Control
             _panStartOffsetX = OffsetX;
             _panStartOffsetY = OffsetY;
             return;
+        }
+        if (e.Button == MouseButtons.Left && _drawingStart == null)
+        {
+            int? pieceHit = HitPieceBounds(e.Location);
+            if (pieceHit != null && NearestVertex(e.Location) == null)
+            {
+                _selectedPieceIndex = pieceHit.Value;
+                _movingPieceIndex = pieceHit.Value;
+                _lastMovePoint = ScreenToModel(e.Location);
+                Invalidate();
+                SelectionChanged?.Invoke(this, EventArgs.Empty);
+                return;
+            }
         }
         if (e.Button == MouseButtons.Left) HandleLeftClick(e.Location);
     }
@@ -150,6 +272,16 @@ sealed class CustomTrimControl : Control
             Invalidate();
             return;
         }
+        if (_movingPieceIndex >= 0 && _lastMovePoint != null && _movingPieceIndex < _pieces.Count)
+        {
+            PointF current = ScreenToModel(e.Location);
+            float dx = current.X - _lastMovePoint.Value.X;
+            float dy = current.Y - _lastMovePoint.Value.Y;
+            MovePiece(_pieces[_movingPieceIndex], dx, dy);
+            _lastMovePoint = current;
+            Invalidate();
+            return;
+        }
         if (_drawingStart != null)
         {
             _previewPoint = Snap(ScreenToModel(e.Location));
@@ -161,6 +293,12 @@ sealed class CustomTrimControl : Control
     {
         base.OnMouseUp(e);
         if (e.Button == MouseButtons.Right) _panStart = null;
+        if (e.Button == MouseButtons.Left && _movingPieceIndex >= 0)
+        {
+            _movingPieceIndex = -1;
+            _lastMovePoint = null;
+            Changed();
+        }
     }
 
     protected override void OnMouseWheel(MouseEventArgs e)
@@ -234,7 +372,9 @@ sealed class CustomTrimControl : Control
 
     private int CreatePieceFrom(PointF point)
     {
-        _pieces.Add(new CustomTrimPieceState(SelectedPiece?.Quantity ?? 1, [point]));
+        var piece = new CustomTrimPieceState(SelectedPiece?.Quantity ?? 1, [point]);
+        EnsurePieceColor(piece);
+        _pieces.Add(piece);
         _selectedPieceIndex = _pieces.Count - 1;
         return _selectedPieceIndex;
     }
@@ -264,14 +404,16 @@ sealed class CustomTrimControl : Control
 
     private void DrawGrid(Graphics g)
     {
+        g.Clear(Color.FromArgb(_preferences.CustomTrimBackgroundArgb));
+        if (!_preferences.ShowCustomTrimGrid) return;
         float minor = SnapInches * ZoomPixelsPerInch;
         float major = ZoomPixelsPerInch;
         Point center = CenterPoint();
-        using var minorPen = new Pen(Color.Gainsboro);
-        using var majorPen = new Pen(Color.Silver);
+        using var minorPen = new Pen(Color.FromArgb(_preferences.CustomTrimMinorGridArgb), _preferences.CustomTrimMinorGridThickness);
+        using var majorPen = new Pen(Color.FromArgb(_preferences.CustomTrimMajorGridArgb), _preferences.CustomTrimMajorGridThickness);
         if (minor >= 6) DrawGridLines(g, minorPen, minor, center);
         if (major >= 6) DrawGridLines(g, majorPen, major, center);
-        using var axisPen = new Pen(Color.Gray);
+        using var axisPen = new Pen(Color.FromArgb(_preferences.CustomTrimAxisArgb), _preferences.CustomTrimMajorGridThickness);
         g.DrawLine(axisPen, 0, center.Y, Width, center.Y);
         g.DrawLine(axisPen, center.X, 0, center.X, Height);
     }
@@ -284,24 +426,27 @@ sealed class CustomTrimControl : Control
 
     private void DrawPieces(Graphics g)
     {
-        using var blue = new Pen(Color.RoyalBlue, 3) { StartCap = System.Drawing.Drawing2D.LineCap.Round, EndCap = System.Drawing.Drawing2D.LineCap.Round };
-        using var selected = new Pen(Color.DarkGoldenrod, 3) { StartCap = System.Drawing.Drawing2D.LineCap.Round, EndCap = System.Drawing.Drawing2D.LineCap.Round };
         for (int p = 0; p < _pieces.Count; p++)
         {
             var piece = _pieces[p];
-            var pen = p == _selectedPieceIndex ? selected : blue;
+            EnsurePieceColor(piece);
+            using var pen = PiecePen(piece, p == _selectedPieceIndex);
+            if (p == _selectedPieceIndex) DrawMarquee(g, piece);
             for (int i = 1; i < piece.Vertices.Count; i++) DrawSegment(g, pen, piece.Vertices[i - 1], piece.Vertices[i], true);
+            if (_preferences.ShowCustomTrimAngleArcs) DrawAngleMarkers(g, piece);
             if (piece.Vertices.Count > 0) DrawQuantity(g, piece);
-            foreach (var vertex in piece.Vertices)
+            for (int i = 0; i < piece.Vertices.Count; i++)
             {
-                Point point = ModelToScreen(vertex);
-                using var brush = new SolidBrush(p == _selectedPieceIndex ? Color.Goldenrod : Color.Black);
-                g.FillEllipse(brush, point.X - 4, point.Y - 4, 8, 8);
+                Point point = ModelToScreen(piece.Vertices[i]);
+                bool selectedOrigin = p == _selectedPieceIndex && i == SelectedOriginIndex;
+                using var brush = new SolidBrush(selectedOrigin ? Color.FromArgb(_preferences.CustomTrimOriginArgb) : Color.FromArgb(_preferences.CustomTrimVertexArgb));
+                float size = _preferences.CustomTrimVertexSize;
+                g.FillEllipse(brush, point.X - size / 2f, point.Y - size / 2f, size, size);
             }
         }
         if (_drawingStart != null && _previewPoint != null)
         {
-            using var preview = new Pen(Color.DimGray, 2);
+            using var preview = new Pen(Color.FromArgb(_preferences.CustomTrimSelectedLineArgb), Math.Max(1, _preferences.CustomTrimLineThickness - 1)) { DashStyle = DashStyle.Dash };
             DrawSegment(g, preview, _drawingStart.Value, _previewPoint.Value, true);
         }
     }
@@ -324,14 +469,17 @@ sealed class CustomTrimControl : Control
         int x = (a.X + b.X) / 2;
         int y = (a.Y + b.Y) / 2;
         SizeF size = g.MeasureString(text, Font);
-        g.FillRectangle(Brushes.White, x - size.Width / 2 - 3, y - size.Height / 2 - 2, size.Width + 6, size.Height + 4);
-        g.DrawString(text, Font, Brushes.Black, x - size.Width / 2, y - size.Height / 2);
+        using var background = new SolidBrush(Color.FromArgb(_preferences.CustomTrimLabelBackgroundArgb));
+        using var textBrush = new SolidBrush(Color.FromArgb(_preferences.CustomTrimLabelTextArgb));
+        g.FillRectangle(background, x - size.Width / 2 - 3, y - size.Height / 2 - 2, size.Width + 6, size.Height + 4);
+        g.DrawString(text, Font, textBrush, x - size.Width / 2, y - size.Height / 2);
     }
 
     private void DrawQuantity(Graphics g, CustomTrimPieceState piece)
     {
         Point point = ModelToScreen(piece.Vertices[0]);
-        g.DrawString($"Qty {piece.Quantity}", Font, Brushes.Black, point.X + 8, point.Y - 18);
+        using var textBrush = new SolidBrush(Color.FromArgb(_preferences.CustomTrimLabelTextArgb));
+        g.DrawString($"Qty {piece.Quantity}", Font, textBrush, point.X + 8, point.Y - 18);
     }
 
     private void DrawColorArrow(Graphics g)
@@ -349,9 +497,115 @@ sealed class CustomTrimControl : Control
         var mid = new PointF((from.X + to.X) / 2, (from.Y + to.Y) / 2);
         Point start = ModelToScreen(new PointF((float)(mid.X + nx * 0.4), (float)(mid.Y + ny * 0.4)));
         Point end = ModelToScreen(new PointF((float)(mid.X + nx * 1.1), (float)(mid.Y + ny * 1.1)));
-        using var pen = new Pen(Color.DarkGoldenrod, 2);
+        Color color = Color.FromArgb(_preferences.CustomTrimSelectedLineArgb);
+        using var pen = new Pen(color, 2);
         g.DrawLine(pen, start, end);
-        g.DrawString("Color side", Font, Brushes.DarkGoldenrod, end.X + 6, end.Y - 6);
+        using var brush = new SolidBrush(color);
+        g.DrawString("Color side", Font, brush, end.X + 6, end.Y - 6);
+    }
+
+    private Pen PiecePen(CustomTrimPieceState piece, bool selected)
+    {
+        Color color = selected
+            ? Color.FromArgb(_preferences.CustomTrimSelectedLineArgb)
+            : PieceColor(piece);
+        var pen = new Pen(color, selected ? _preferences.CustomTrimSelectedLineThickness : _preferences.CustomTrimLineThickness)
+        {
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round
+        };
+        return pen;
+    }
+
+    private Color PieceColor(CustomTrimPieceState piece)
+    {
+        if (_preferences.UseRandomCustomTrimPieceColors && piece.ColorArgb is int argb) return Color.FromArgb(argb);
+        return Color.FromArgb(_preferences.CustomTrimLineArgb);
+    }
+
+    private void EnsurePieceColor(CustomTrimPieceState piece)
+    {
+        if (!_preferences.UseRandomCustomTrimPieceColors)
+        {
+            piece.ColorArgb = null;
+            return;
+        }
+        if (piece.ColorArgb != null) return;
+        piece.ColorArgb = RandomBrightColor().ToArgb();
+    }
+
+    private Color RandomBrightColor()
+    {
+        Color color;
+        do
+        {
+            color = Color.FromArgb(_random.Next(85, 256), _random.Next(85, 256), _random.Next(85, 256));
+        }
+        while (color.GetBrightness() < 0.48f);
+        return color;
+    }
+
+    private void DrawMarquee(Graphics g, CustomTrimPieceState piece)
+    {
+        if (!_preferences.ShowCustomTrimMarquee || piece.Vertices.Count == 0) return;
+        Rectangle? bounds = ScreenBounds(piece);
+        if (bounds == null) return;
+        Rectangle rectangle = bounds.Value;
+        rectangle.Inflate(12, 12);
+        using var pen = new Pen(Color.FromArgb(_preferences.CustomTrimSelectedLineArgb), 1.5f) { DashStyle = DashStyle.Dash };
+        g.DrawRectangle(pen, rectangle);
+    }
+
+    private void DrawAngleMarkers(Graphics g, CustomTrimPieceState piece)
+    {
+        for (int i = 1; i < piece.Vertices.Count - 1; i++)
+        {
+            Point vertex = ModelToScreen(piece.Vertices[i]);
+            Point previous = ModelToScreen(piece.Vertices[i - 1]);
+            Point next = ModelToScreen(piece.Vertices[i + 1]);
+            double angle = InteriorAngle(piece.Vertices[i - 1], piece.Vertices[i], piece.Vertices[i + 1]);
+            float start = AngleDegrees(vertex, previous);
+            float sweep = SweepDegrees(start, AngleDegrees(vertex, next));
+            const float radius = 24;
+            using var pen = new Pen(Color.FromArgb(_preferences.CustomTrimSelectedLineArgb), 1.5f) { DashStyle = DashStyle.Dot };
+            g.DrawArc(pen, vertex.X - radius, vertex.Y - radius, radius * 2, radius * 2, start, sweep);
+            string text = $"{Num(angle)}°";
+            using var brush = new SolidBrush(Color.FromArgb(_preferences.CustomTrimLabelTextArgb));
+            g.DrawString(text, Font, brush, vertex.X + 12, vertex.Y + 12);
+        }
+    }
+
+    private int? HitPieceBounds(Point screen)
+    {
+        for (int i = _pieces.Count - 1; i >= 0; i--)
+        {
+            Rectangle? bounds = ScreenBounds(_pieces[i]);
+            if (bounds == null) continue;
+            Rectangle rectangle = bounds.Value;
+            rectangle.Inflate(12, 12);
+            if (rectangle.Contains(screen)) return i;
+        }
+        return null;
+    }
+
+    private Rectangle? ScreenBounds(CustomTrimPieceState piece)
+    {
+        if (piece.Vertices.Count == 0) return null;
+        var points = piece.Vertices.Select(ModelToScreen).ToList();
+        int left = points.Min(p => p.X);
+        int top = points.Min(p => p.Y);
+        int right = points.Max(p => p.X);
+        int bottom = points.Max(p => p.Y);
+        return Rectangle.FromLTRB(left, top, right, bottom);
+    }
+
+    private static void MovePiece(CustomTrimPieceState piece, float dx, float dy)
+    {
+        for (int i = 0; i < piece.Vertices.Count; i++)
+        {
+            PointF vertex = piece.Vertices[i];
+            piece.Vertices[i] = new PointF(vertex.X + dx, vertex.Y + dy);
+        }
     }
 
     private Segment? LongestSegment(CustomTrimPieceState? piece)
@@ -391,10 +645,35 @@ sealed class CustomTrimControl : Control
         TrimChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private static CustomTrimPieceState CopyPiece(CustomTrimPieceState piece) => new(piece.Quantity, piece.Vertices.Select(p => new PointF(p.X, p.Y)).ToList());
+    private static CustomTrimPieceState CopyPiece(CustomTrimPieceState piece) => new(piece.Quantity, piece.Vertices.Select(p => new PointF(p.X, p.Y)).ToList())
+    {
+        ColorArgb = piece.ColorArgb,
+        OriginIndex = piece.OriginIndex
+    };
     private static float Mod(float value, float modulus) => (value % modulus + modulus) % modulus;
     private static double Distance(PointF a, PointF b) => Math.Sqrt(Math.Pow(b.X - a.X, 2) + Math.Pow(b.Y - a.Y, 2));
     private static double Distance(Point a, Point b) => Math.Sqrt(Math.Pow(b.X - a.X, 2) + Math.Pow(b.Y - a.Y, 2));
+    private static double InteriorAngle(PointF previous, PointF vertex, PointF next)
+    {
+        double ax = previous.X - vertex.X;
+        double ay = previous.Y - vertex.Y;
+        double bx = next.X - vertex.X;
+        double by = next.Y - vertex.Y;
+        double lengths = Math.Sqrt(ax * ax + ay * ay) * Math.Sqrt(bx * bx + by * by);
+        if (lengths <= 0) return 0;
+        return Math.Acos(Math.Clamp(((ax * bx) + (ay * by)) / lengths, -1, 1)) * 180.0 / Math.PI;
+    }
+
+    private static float AngleDegrees(Point center, Point point) => (float)(Math.Atan2(point.Y - center.Y, point.X - center.X) * 180.0 / Math.PI);
+
+    private static float SweepDegrees(float start, float end)
+    {
+        float sweep = end - start;
+        while (sweep > 180) sweep -= 360;
+        while (sweep < -180) sweep += 360;
+        return sweep;
+    }
+
     private static string Num(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
     private static string Money(double value) => value.ToString("C", CultureInfo.GetCultureInfo("en-US"));
 
