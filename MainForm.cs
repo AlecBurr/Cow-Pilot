@@ -32,6 +32,7 @@ sealed class MainForm : Form
     private readonly NumericUpDown[] _bootCounts = QuoteCalculator.BootNames.Select(_ => CountBox()).ToArray();
     private readonly CustomTrimControl _customTrim = new();
     private readonly NumericUpDown _customTrimQuantity = CountBox(1);
+    private readonly Label _customTrimAdded = new() { Text = "Custom Trim Added", AutoSize = true, ForeColor = ChangedColor, Font = BoldFont(9), Visible = false };
     private readonly Label _customTrimSummary = new() { Dock = DockStyle.Bottom, Height = 24, BorderStyle = BorderStyle.Fixed3D };
     private readonly Label _customTrimPiece = new() { AutoSize = true, Text = "Piece: none" };
     private readonly TextBox _customer = new();
@@ -84,6 +85,7 @@ sealed class MainForm : Form
             _customTrimSummary.Text = _customTrim.Summary();
             _customTrimPiece.Text = _customTrim.SelectedPieceText;
             _customTrimQuantity.Value = Math.Max(_customTrimQuantity.Minimum, Math.Min(_customTrimQuantity.Maximum, _customTrim.SelectedQuantity));
+            UpdateCustomTrimAddedIndicator();
             MarkDirty();
         };
         _customTrimQuantity.ValueChanged += (_, _) => _customTrim.SelectedQuantity = (int)_customTrimQuantity.Value;
@@ -194,6 +196,8 @@ sealed class MainForm : Form
             grid.Controls.Add(_trimCounts[names[i]], 1, i + 1);
             grid.Controls.Add(_trimExtras[names[i]], 2, i + 1);
         }
+        grid.Controls.Add(_customTrimAdded, 0, names.Length + 1);
+        grid.SetColumnSpan(_customTrimAdded, 3);
         return Group("Standard Trim", grid);
     }
 
@@ -563,16 +567,23 @@ sealed class MainForm : Form
         foreach (var input in _trimExtras.Values) SetChanged(input, input.Value != 0);
         foreach (var input in _miscCounts) SetChanged(input, input.Value != 0);
         foreach (var input in _bootCounts) SetChanged(input, input.Value != 0);
-        SetChanged(_customTrimQuantity, _customTrim.State.Pieces.Count > 0 && _customTrimQuantity.Value != 1);
+        _customTrimQuantity.BackColor = SystemColors.Window;
+        _customTrimQuantity.ForeColor = SystemColors.ControlText;
+        UpdateCustomTrimAddedIndicator();
         HighlightSelectedScrew();
     }
 
     private static void SetChanged(Control control, bool changed)
     {
         Color normal = control is TextBox or NumericUpDown ? SystemColors.Window : SystemColors.Control;
-        control.BackColor = normal;
-        control.ForeColor = changed ? ChangedColor : SystemColors.ControlText;
+        control.BackColor = changed ? ChangedColor : normal;
+        control.ForeColor = SystemColors.ControlText;
         if (control is CheckBox checkBox) checkBox.UseVisualStyleBackColor = !changed;
+    }
+
+    private void UpdateCustomTrimAddedIndicator()
+    {
+        _customTrimAdded.Visible = _customTrim.State.Pieces.Count > 0;
     }
 
     private void UpdateTrimExtraAvailability()
