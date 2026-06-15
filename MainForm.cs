@@ -17,7 +17,7 @@ sealed class MainForm : Form
     private readonly TextBox _lapScrewBags = new() { Text = "0", TextAlign = HorizontalAlignment.Right };
     private readonly Label _suggestedScrews = new() { Text = "Suggested: 0", AutoSize = true };
     private readonly Label _suggestedLapScrews = new() { Text = "Suggested: 0", AutoSize = true };
-    private readonly Label _status = new() { Dock = DockStyle.Fill, Height = 24, BorderStyle = BorderStyle.Fixed3D, Text = "Ready" };
+    private readonly Label _status = new() { Dock = DockStyle.Fill, Height = 24, BorderStyle = BorderStyle.Fixed3D, Text = "Ready", BackColor = CalculatingColor, ForeColor = Color.White };
     private readonly Label _centerOfBalance = new() { AutoSize = false, Height = 34, MinimumSize = new Size(240, 34), TextAlign = ContentAlignment.MiddleLeft, BorderStyle = BorderStyle.Fixed3D };
     private readonly Label _weight = new() { AutoSize = false, Height = 34, MinimumSize = new Size(240, 34), TextAlign = ContentAlignment.MiddleLeft, BorderStyle = BorderStyle.Fixed3D };
     private readonly CheckBox _useSuggested = new() { Text = "Use suggested screws", AutoSize = true };
@@ -135,13 +135,14 @@ sealed class MainForm : Form
     private TabPage BuildQuoteTab()
     {
         var page = new TabPage("Calculator");
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 3, Padding = new Padding(8) };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 52));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 26));
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 3, Padding = new Padding(8) };
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 14));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 14));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 18));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 58));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 22));
         page.Controls.Add(root);
 
@@ -149,25 +150,29 @@ sealed class MainForm : Form
         root.SetRowSpan(_measurements.Parent!, 2);
         root.Controls.Add(Group("Formatted Output", _formatted), 1, 0);
         root.SetRowSpan(_formatted.Parent!, 2);
-        root.Controls.Add(BuildTrimPanel(), 2, 0);
-        root.Controls.Add(BuildScrewsPanel(), 2, 1);
-        root.Controls.Add(BuildMiscPanel(), 3, 0);
-        root.SetRowSpan(root.GetControlFromPosition(3, 0)!, 2);
+        root.Controls.Add(BuildScrewsPanel(), 2, 0);
+        root.Controls.Add(BuildTrimPanel(), 3, 0);
+        root.Controls.Add(BuildMiscPanel(), 4, 0);
+        root.SetRowSpan(root.GetControlFromPosition(4, 0)!, 2);
         root.Controls.Add(BuildInfoPanel(), 0, 2);
         root.SetColumnSpan(root.GetControlFromPosition(0, 2)!, 2);
         root.Controls.Add(BuildCobPanel(), 2, 2);
-        root.Controls.Add(BuildPricesPanel(), 3, 2);
+        root.SetColumnSpan(root.GetControlFromPosition(2, 2)!, 2);
+        root.Controls.Add(BuildPricesPanel(), 4, 2);
         return page;
     }
 
     private Control BuildScrewsPanel()
     {
-        return Group("Screws", Stack(_screwButtons.Cast<Control>().Concat([
-            _useSuggested,
-            Row("Total LF", _totalLf),
-            Row("Screw bags", _screwBags, _suggestedScrews),
-            Row("Lap bags", _lapScrewBags, _suggestedLapScrews)
-        ]).ToArray()));
+        var panel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 8 };
+        for (int i = 0; i < 8; i++) panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        int row = 0;
+        foreach (var button in _screwButtons) panel.Controls.Add(button, 0, row++);
+        panel.Controls.Add(_useSuggested, 0, row++);
+        panel.Controls.Add(Row("Total LF", _totalLf), 0, row++);
+        panel.Controls.Add(Row("Screw bags", _screwBags, _suggestedScrews), 0, row++);
+        panel.Controls.Add(Row("Lap bags", _lapScrewBags, _suggestedLapScrews), 0, row);
+        return Group("Screws", panel);
     }
 
     private Control BuildTrimPanel()
@@ -176,7 +181,7 @@ sealed class MainForm : Form
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
-        grid.Controls.Add(new Label { Text = "Trim", AutoSize = true }, 0, 0);
+        grid.Controls.Add(new Label(), 0, 0);
         grid.Controls.Add(new Label { Text = "Qty", AutoSize = true }, 1, 0);
         grid.Controls.Add(new Label { Text = "Extra in.", AutoSize = true }, 2, 0);
 
@@ -544,7 +549,8 @@ sealed class MainForm : Form
 
     private void UpdateChangedHighlights()
     {
-        SetChanged(_measurements, _measurements.TextLength > 0);
+        _measurements.ForeColor = SystemColors.WindowText;
+        _measurements.BackColor = SystemColors.Window;
         SetChanged(_screwBags, !_useSuggested.Checked && _screwBags.Text.Trim() != "0" && _screwBags.Text.Trim().Length > 0);
         SetChanged(_lapScrewBags, !_useSuggested.Checked && _lapScrewBags.Text.Trim() != "0" && _lapScrewBags.Text.Trim().Length > 0);
         SetChanged(_customer, _customer.TextLength > 0);
@@ -587,9 +593,12 @@ sealed class MainForm : Form
 
     private void SetStatus(string text, Color backColor, Color foreColor)
     {
+        if (_status.Text == text && _status.BackColor == backColor && _status.ForeColor == foreColor) return;
+        _status.SuspendLayout();
         _status.Text = text;
         _status.BackColor = backColor;
         _status.ForeColor = foreColor;
+        _status.ResumeLayout();
     }
 
     private void ShowConsole()
