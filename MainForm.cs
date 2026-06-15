@@ -553,8 +553,8 @@ sealed class MainForm : Form
 
     private void UpdateChangedHighlights()
     {
-        _measurements.ForeColor = SystemColors.WindowText;
-        _measurements.BackColor = SystemColors.Window;
+        ResetInputHighlight(_measurements);
+        ResetInputHighlight(_formatted);
         SetChanged(_screwBags, !_useSuggested.Checked && _screwBags.Text.Trim() != "0" && _screwBags.Text.Trim().Length > 0);
         SetChanged(_lapScrewBags, !_useSuggested.Checked && _lapScrewBags.Text.Trim() != "0" && _lapScrewBags.Text.Trim().Length > 0);
         SetChanged(_customer, _customer.TextLength > 0);
@@ -567,8 +567,7 @@ sealed class MainForm : Form
         foreach (var input in _trimExtras.Values) SetChanged(input, input.Value != 0);
         foreach (var input in _miscCounts) SetChanged(input, input.Value != 0);
         foreach (var input in _bootCounts) SetChanged(input, input.Value != 0);
-        _customTrimQuantity.BackColor = SystemColors.Window;
-        _customTrimQuantity.ForeColor = SystemColors.ControlText;
+        ResetInputHighlight(_customTrimQuantity);
         UpdateCustomTrimAddedIndicator();
         HighlightSelectedScrew();
     }
@@ -579,6 +578,12 @@ sealed class MainForm : Form
         control.BackColor = changed ? ChangedColor : normal;
         control.ForeColor = SystemColors.ControlText;
         if (control is CheckBox checkBox) checkBox.UseVisualStyleBackColor = !changed;
+    }
+
+    private static void ResetInputHighlight(Control control)
+    {
+        control.BackColor = control is TextBox or NumericUpDown ? SystemColors.Window : SystemColors.Control;
+        control.ForeColor = control is TextBox ? SystemColors.WindowText : SystemColors.ControlText;
     }
 
     private void UpdateCustomTrimAddedIndicator()
