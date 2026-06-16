@@ -5,7 +5,8 @@ namespace CowPilot;
 
 sealed class MainForm : Form
 {
-    private static readonly Color ChangedColor = Color.Yellow;
+    private static readonly Color ChangedBoxColor = Color.LightBlue;
+    private static readonly Color ChangedTextColor = Color.FromArgb(128, 24, 24);
     private static readonly Color SuccessColor = Color.FromArgb(46, 125, 50);
     private static readonly Color ErrorColor = Color.FromArgb(183, 28, 28);
     private static readonly Color CalculatingColor = Color.DimGray;
@@ -45,9 +46,13 @@ sealed class MainForm : Form
     private readonly TextBox _customAngleOrPitch = new() { Width = 92 };
     private readonly NumericUpDown _customInteriorAngle = AngleBox(90);
     private readonly Label _customPitchAngle = new() { Text = "Angle: 0 deg", AutoSize = true };
-    private readonly Label _customTrimAdded = new() { Text = "Custom Trim Added", AutoSize = true, ForeColor = ChangedColor, Font = BoldFont(9), Visible = false };
+    private readonly Label _customTrimAdded = new() { Text = "Custom Trim Added", AutoSize = true, ForeColor = ChangedTextColor, Font = BoldFont(9), Visible = false };
     private readonly Label _customTrimSummary = new() { Dock = DockStyle.Bottom, Height = 24, BorderStyle = BorderStyle.Fixed3D };
     private readonly Label _customTrimPiece = new() { AutoSize = true, Text = "Piece: none" };
+    private readonly PictureBox _mascot = new() { Width = 82, Height = 82, SizeMode = PictureBoxSizeMode.Zoom, Margin = new Padding(8, 0, 8, 0) };
+    private readonly System.Windows.Forms.Timer _mascotTimer = new();
+    private Image? _idleMascot;
+    private Image? _explodeMascot;
     private readonly TextBox _customer = new();
     private readonly TextBox _phone = new();
     private readonly TextBox _color = new();
@@ -77,6 +82,7 @@ sealed class MainForm : Form
             ScrewButton(ScrewOption.Tubing)
         ];
         _screwButtons[0].Checked = true;
+        LoadMascotImages();
 
         var tabs = new TabControl { Dock = DockStyle.Fill };
         tabs.TabPages.Add(BuildQuoteTab());
@@ -88,7 +94,7 @@ sealed class MainForm : Form
         shell.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         shell.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         shell.Controls.Add(MainMenuStrip, 0, 0);
-        shell.Controls.Add(BuildToolBar(), 0, 1);
+        shell.Controls.Add(BuildHeader(), 0, 1);
         shell.Controls.Add(tabs, 0, 2);
         shell.Controls.Add(_status, 0, 3);
         Controls.Add(shell);
@@ -109,6 +115,7 @@ sealed class MainForm : Form
         ApplyRuntimeSettings();
         _customTrimSummary.Text = _customTrim.Summary();
         SyncCustomTrimSidebar();
+        Recalculate();
         ResetSavedSnapshot();
     }
 
@@ -154,6 +161,57 @@ sealed class MainForm : Form
         save.Click += (_, _) => QuickSave();
         toolbar.Items.Add(save);
         return toolbar;
+    }
+
+    private Control BuildHeader()
+    {
+        var header = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        header.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        header.Controls.Add(BuildToolBar(), 0, 0);
+        header.Controls.Add(_mascot, 1, 0);
+        return header;
+    }
+
+    private void LoadMascotImages()
+    {
+        string baseDir = AppContext.BaseDirectory;
+        string idlePath = Path.Combine(baseDir, "Assets", "idle lossy.gif");
+        string explodePath = Path.Combine(baseDir, "Assets", "explode lossy.gif");
+        if (!File.Exists(idlePath)) idlePath = Path.Combine(Application.StartupPath, "Assets", "idle lossy.gif");
+        if (!File.Exists(explodePath)) explodePath = Path.Combine(Application.StartupPath, "Assets", "explode lossy.gif");
+        if (File.Exists(idlePath)) _idleMascot = Image.FromFile(idlePath);
+        if (File.Exists(explodePath)) _explodeMascot = Image.FromFile(explodePath);
+        _mascot.Visible = _idleMascot != null;
+        _mascot.Image = _idleMascot;
+        _mascotTimer.Tick += (_, _) =>
+        {
+            _mascotTimer.Stop();
+            _mascot.Image = _idleMascot;
+        };
+    }
+
+    private void PlayMascotExplosion()
+    {
+        if (_explodeMascot == null || _idleMascot == null) return;
+        _mascotTimer.Stop();
+        _mascot.Image = _explodeMascot;
+        _mascotTimer.Interval = Math.Max(500, GifDurationMs(_explodeMascot));
+        _mascotTimer.Start();
+    }
+
+    private static int GifDurationMs(Image image)
+    {
+        const int frameDelayProperty = 0x5100;
+        if (!image.PropertyIdList.Contains(frameDelayProperty)) return 1500;
+        byte[] values = image.GetPropertyItem(frameDelayProperty)?.Value ?? [];
+        int total = 0;
+        for (int i = 0; i + 3 < values.Length; i += 4)
+        {
+            total += Math.Max(2, BitConverter.ToInt32(values, i)) * 10;
+        }
+        return total <= 0 ? 1500 : total;
     }
 
     private TabPage BuildQuoteTab()
@@ -763,6 +821,7 @@ sealed class MainForm : Form
         catch (Exception ex)
         {
             _lastQuote = null;
+            ClearQuoteOutputs();
             SetStatus(ex.Message, ErrorColor, Color.White);
             LogDebug("Calculation error: " + ex.Message);
         }
@@ -837,8 +896,9 @@ sealed class MainForm : Form
         if (!ConfirmDiscardWork()) return;
         ApplyInput(new QuoteInput("", ScrewOption.OneInch, false, "0", "0", false, TrimSelection.Empty, MiscSelection.Empty, CustomTrimState.Empty));
         _customer.Clear(); _phone.Clear(); _color.Clear(); _notes.Clear();
-        ClearQuoteOutputs();
+        Recalculate();
         ResetSavedSnapshot();
+        PlayMascotExplosion();
     }
 
     private void ClearCustomTrim()
@@ -847,6 +907,7 @@ sealed class MainForm : Form
         DialogResult result = MessageBox.Show(this, "Clear the custom trim graph?", "Clear Custom Trim", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
         if (result != DialogResult.Yes) return;
         _customTrim.ClearPieces();
+        PlayMascotExplosion();
     }
 
     private bool SaveAs()
@@ -975,7 +1036,7 @@ sealed class MainForm : Form
         UpdateChangedHighlights();
         SetStatus("Calculating...", CalculatingColor, Color.White);
         _timer.Stop();
-        _timer.Start();
+        Recalculate();
     }
 
     private void ResetSavedSnapshot()
@@ -1017,10 +1078,16 @@ sealed class MainForm : Form
 
     private static void SetChanged(Control control, bool changed)
     {
-        Color normal = control is TextBox or NumericUpDown ? SystemColors.Window : SystemColors.Control;
-        control.BackColor = changed ? ChangedColor : normal;
-        control.ForeColor = SystemColors.ControlText;
-        if (control is CheckBox checkBox) checkBox.UseVisualStyleBackColor = !changed;
+        if (control is TextBox or NumericUpDown)
+        {
+            control.BackColor = changed ? ChangedBoxColor : SystemColors.Window;
+            control.ForeColor = SystemColors.ControlText;
+            return;
+        }
+
+        control.BackColor = SystemColors.Control;
+        control.ForeColor = changed ? ChangedTextColor : SystemColors.ControlText;
+        if (control is CheckBox checkBox) checkBox.UseVisualStyleBackColor = true;
     }
 
     private static void ResetInputHighlight(Control control)
@@ -1138,7 +1205,7 @@ sealed class MainForm : Form
 
     private void HighlightSelectedScrew()
     {
-        foreach (var pair in _screwButtonMap) pair.Value.ForeColor = pair.Value.Checked ? Color.DarkGoldenrod : SystemColors.ControlText;
+        foreach (var pair in _screwButtonMap) pair.Value.ForeColor = pair.Value.Checked ? ChangedTextColor : SystemColors.ControlText;
     }
 
     private static GroupBox Group(string title, Control child)

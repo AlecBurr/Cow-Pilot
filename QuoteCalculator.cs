@@ -48,12 +48,6 @@ static class QuoteCalculator
         double chargedLapScrewBags = input.UseSuggestedScrews ? suggestedLapScrewBags : ParseNonNegative(input.LapScrewBagsText, "Bags of Lap");
         double customTrimPrice = CustomTrimPrice(input.CustomTrim, prices);
 
-        if (measurements.Count == 0 && !input.Trim.HasItems && !input.Misc.HasItems && customTrimPrice == 0
-            && chargedScrewBags == 0 && chargedLapScrewBags == 0)
-        {
-            throw new InvalidOperationException("Enter measurements, trim, or misc items before calculating.");
-        }
-
         var quotes = new Dictionary<MetalOption, QuoteResult>();
         foreach (var metal in Metals)
         {

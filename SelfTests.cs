@@ -26,6 +26,11 @@ static class SelfTests
         Assert(quote.CustomTrimPrice > 0, "custom trim price");
         Assert(quote.Quotes[MetalOption.Galv29].TotalWeight > 0, "quote weight");
 
+        var emptyQuote = QuoteCalculator.Calculate(new QuoteInput("", ScrewOption.OneInch, false, "0", "0", false,
+            TrimSelection.Empty, MiscSelection.Empty, CustomTrimState.Empty));
+        Assert(emptyQuote.GroupedPanels.Count == 0, "empty quote panels");
+        Assert(emptyQuote.Quotes.Values.All(result => result.Subtotal == 0 && result.GrandTotal == 0), "empty quote zero totals");
+
         var prices = new PriceSettings();
         prices.Normalize();
         prices.Metal(MetalOption.Galv29).LinearFootPrice = 100;
@@ -47,7 +52,7 @@ static class SelfTests
         Assert(loaded.Input.CustomTrim.Pieces[0].Quantity == 2, "custom trim quantity load");
         Assert(loaded.Input.CustomTrim.Pieces[0].Vertices.Count == 3, "custom trim vertices load");
 
-        string releaseJson = """{"version":"v9.8.7","url":"https://github.com/AlecBurr/Cow-Pilot/blob/main/release/CowPilot-9.8.7-win-x64.zip"}""";
+        string releaseJson = """{"version":"v9.8.7","url":"https://github.com/AlecBurr/Cow-Pilot/releases/download/v9.8.7/CowPilot-9.8.7-win-x64.zip"}""";
         Assert(UpdateChecker.TryReadLatestManifest(releaseJson, out string latest, out string? downloadUrl), "update manifest parse");
         Assert(latest == "9.8.7" && downloadUrl!.EndsWith("CowPilot-9.8.7-win-x64.zip", StringComparison.Ordinal), "update manifest values");
         string encoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(releaseJson));
