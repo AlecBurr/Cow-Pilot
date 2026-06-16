@@ -217,6 +217,10 @@ static class QuoteCalculator
             + misc.Caulk * prices.MiscItem("Caulk").Price
             + misc.VentedClosures * prices.MiscItem("VentedClosures").Price
             + misc.UniversalClosures * prices.MiscItem("UniversalClosures").Price
+            + misc.RedSnips * prices.MiscItem("RedSnips").Price
+            + misc.GreenSnips * prices.MiscItem("GreenSnips").Price
+            + misc.BlueSnips * prices.MiscItem("BlueSnips").Price
+            + misc.TurboShear * prices.MiscItem("TurboShear").Price
             + boots;
     }
 

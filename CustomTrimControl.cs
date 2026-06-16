@@ -39,7 +39,7 @@ sealed class CustomTrimControl : Control
     public float ZoomPixelsPerInch { get; private set; } = 64;
     public float OffsetX { get; private set; }
     public float OffsetY { get; private set; }
-    public float SnapInches { get; set; } = 0.125f;
+    public float SnapInches { get; set; } = 1f;
     public int ColorSide { get; private set; } = 1;
 
     public CustomTrimControl()
@@ -113,7 +113,7 @@ sealed class CustomTrimControl : Control
         ZoomPixelsPerInch = Math.Clamp(state.ZoomPixelsPerInch <= 0 ? 64 : state.ZoomPixelsPerInch, 4, 360);
         OffsetX = state.OffsetX;
         OffsetY = state.OffsetY;
-        SnapInches = state.SnapInches <= 0 ? 0.125f : state.SnapInches;
+        SnapInches = state.SnapInches <= 0 ? 1f : state.SnapInches;
         ColorSide = state.ColorSide >= 0 ? 1 : -1;
         Changed();
     }
@@ -145,8 +145,8 @@ sealed class CustomTrimControl : Control
         if (SelectedPiece == null) BeginNewPiece();
         SelectedPiece!.Vertices.Add(point);
         SelectedPiece.OriginIndex = Math.Clamp(SelectedPiece.OriginIndex, 0, Math.Max(0, SelectedPiece.Vertices.Count - 1));
-        _drawingStart = point;
-        _drawingPieceIndex = _selectedPieceIndex;
+        _drawingStart = null;
+        _previewPoint = null;
         Changed();
     }
 
@@ -155,8 +155,8 @@ sealed class CustomTrimControl : Control
         if (SelectedPiece == null || index < 0 || index >= SelectedPiece.Vertices.Count) return;
         SelectedPiece.Vertices[index] = point;
         SelectedPiece.OriginIndex = Math.Clamp(SelectedPiece.OriginIndex, 0, Math.Max(0, SelectedPiece.Vertices.Count - 1));
-        _drawingStart = SelectedPiece.Vertices.LastOrDefault();
-        _drawingPieceIndex = _selectedPieceIndex;
+        _drawingStart = null;
+        _previewPoint = null;
         Changed();
     }
 
@@ -168,9 +168,30 @@ sealed class CustomTrimControl : Control
         PointF start = SelectedPiece.Vertices[^1];
         double radians = angleDegrees * Math.PI / 180.0;
         var end = new PointF((float)(start.X + Math.Cos(radians) * length), (float)(start.Y + Math.Sin(radians) * length));
-        SelectedPiece.Vertices.Add(Snap(end));
-        _drawingStart = SelectedPiece.Vertices[^1];
-        _drawingPieceIndex = _selectedPieceIndex;
+        SelectedPiece.Vertices.Add(end);
+        _drawingStart = null;
+        _previewPoint = null;
+        Changed();
+    }
+
+    public void UpdateSegment(int segmentIndex, double length, double angleDegrees)
+    {
+        if (SelectedPiece == null || length <= 0) return;
+        int endIndex = segmentIndex + 1;
+        if (segmentIndex < 0 || endIndex >= SelectedPiece.Vertices.Count) return;
+        PointF start = SelectedPiece.Vertices[segmentIndex];
+        PointF oldEnd = SelectedPiece.Vertices[endIndex];
+        double radians = angleDegrees * Math.PI / 180.0;
+        PointF newEnd = new((float)(start.X + Math.Cos(radians) * length), (float)(start.Y + Math.Sin(radians) * length));
+        float dx = newEnd.X - oldEnd.X;
+        float dy = newEnd.Y - oldEnd.Y;
+        for (int i = endIndex; i < SelectedPiece.Vertices.Count; i++)
+        {
+            PointF vertex = SelectedPiece.Vertices[i];
+            SelectedPiece.Vertices[i] = new PointF(vertex.X + dx, vertex.Y + dy);
+        }
+        _drawingStart = null;
+        _previewPoint = null;
         Changed();
     }
 
@@ -306,6 +327,7 @@ sealed class CustomTrimControl : Control
         if (e.Button == MouseButtons.Right) _panStart = null;
         if (e.Button == MouseButtons.Left && _movingPieceIndex >= 0)
         {
+            if (_movingPieceIndex < _pieces.Count) SnapPieceOrigin(_pieces[_movingPieceIndex]);
             _movingPieceIndex = -1;
             _lastMovePoint = null;
             Changed();
@@ -624,6 +646,15 @@ sealed class CustomTrimControl : Control
     private PointF Snap(PointF point)
     {
         return new PointF((float)(Math.Round(point.X / SnapInches) * SnapInches), (float)(Math.Round(point.Y / SnapInches) * SnapInches));
+    }
+
+    private void SnapPieceOrigin(CustomTrimPieceState piece)
+    {
+        if (piece.Vertices.Count == 0) return;
+        int origin = Math.Clamp(piece.OriginIndex, 0, piece.Vertices.Count - 1);
+        PointF current = piece.Vertices[origin];
+        PointF snapped = Snap(current);
+        MovePiece(piece, snapped.X - current.X, snapped.Y - current.Y);
     }
 
     private void Changed()

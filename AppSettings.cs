@@ -62,7 +62,11 @@ sealed class PriceSettings
         new() { Key = "ButylTape", Label = "Butyl Tape (45')", Price = 6.00 },
         new() { Key = "Caulk", Label = "Caulk", Price = 10.50 },
         new() { Key = "VentedClosures", Label = "Vented Closures (1)", Price = 5.25 },
-        new() { Key = "UniversalClosures", Label = "Universal Closures (20')", Price = 22.50 }
+        new() { Key = "UniversalClosures", Label = "Universal Closures (20')", Price = 22.50 },
+        new() { Key = "RedSnips", Label = "Red Snips", Price = 34.00 },
+        new() { Key = "GreenSnips", Label = "Green Snips", Price = 34.00 },
+        new() { Key = "BlueSnips", Label = "Blue Snips", Price = 38.00 },
+        new() { Key = "TurboShear", Label = "Turbo Shear", Price = 150.00 }
     ];
     private static readonly NamedPriceSetting[] BootDefaults = QuoteCalculator.BootCatalog
         .Select(boot => new NamedPriceSetting { Key = boot.Name, Label = boot.Name, Price = boot.Price })

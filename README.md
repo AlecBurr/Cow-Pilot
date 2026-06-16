@@ -17,7 +17,7 @@ dotnet run -- --self-test
 ## Publish
 
 ```powershell
-dotnet publish CowPilot.csproj -c Release -o publish\1.1.1 -p:PublishSingleFile=true --self-contained false
+dotnet publish CowPilot.csproj -c Release -o publish\1.1.2 -p:PublishSingleFile=true --self-contained false
 ```
 
-Current app version: `1.1.1`.
+Current app version: `1.1.2`.

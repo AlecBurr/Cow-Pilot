@@ -58,13 +58,18 @@ sealed record MiscSelection(
     int Caulk,
     int VentedClosures,
     int UniversalClosures,
+    int RedSnips,
+    int GreenSnips,
+    int BlueSnips,
+    int TurboShear,
     int[] BootCounts)
 {
-    public static MiscSelection Empty => new(0, 0, 0, 0, 0, 0, new int[QuoteCalculator.BootCatalog.Length]);
+    public static MiscSelection Empty => new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, new int[QuoteCalculator.BootCatalog.Length]);
 
     [JsonIgnore]
     public bool HasItems => OutsideClosures > 0 || InsideClosures > 0 || ButylTape > 0 || Caulk > 0
-        || VentedClosures > 0 || UniversalClosures > 0 || BootCounts.Any(count => count > 0);
+        || VentedClosures > 0 || UniversalClosures > 0 || RedSnips > 0 || GreenSnips > 0 || BlueSnips > 0
+        || TurboShear > 0 || BootCounts.Any(count => count > 0);
 
     public int BootCount(int index) => index >= 0 && index < BootCounts.Length ? BootCounts[index] : 0;
 }
@@ -84,7 +89,7 @@ sealed record CustomTrimState(
     float SnapInches,
     int ColorSide)
 {
-    public static CustomTrimState Empty => new([], 64, 0, 0, 0.125f, 1);
+    public static CustomTrimState Empty => new([], 64, 0, 0, 1f, 1);
 }
 
 sealed record QuoteInput(

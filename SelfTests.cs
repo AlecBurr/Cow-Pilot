@@ -8,7 +8,7 @@ static class SelfTests
         Assert(QuoteCalculator.ParseLengthInInches("12'6\"") == 150, "feet and inches parse");
         Assert(QuoteCalculator.ParseLengthInInches("144") == 144, "raw inches parse");
 
-        var misc = MiscSelection.Empty with { BootCounts = NewBootCounts((0, 2), (1, 3)) };
+        var misc = MiscSelection.Empty with { RedSnips = 1, TurboShear = 1, BootCounts = NewBootCounts((0, 2), (1, 3)) };
         var input = new QuoteInput(
             "2x10'\r\n1x12'6\"",
             ScrewOption.OneInch,
@@ -18,7 +18,7 @@ static class SelfTests
             false,
             TrimSelection.Empty with { Ridges = 1, DeluxeCorners = 1, Eaves = 1, EavesExtraInches = 6 },
             misc,
-            new CustomTrimState([new CustomTrimPieceState(2, [new PointF(0, 0), new PointF(3, 0), new PointF(3, 3)])], 64, 0, 0, 0.125f, 1));
+            new CustomTrimState([new CustomTrimPieceState(2, [new PointF(0, 0), new PointF(3, 0), new PointF(3, 3)])], 64, 0, 0, 1f, 1));
 
         var quote = QuoteCalculator.Calculate(input);
         Assert(quote.GroupedPanels[150] == 1 && quote.GroupedPanels[120] == 2, "grouped panels");
@@ -41,6 +41,7 @@ static class SelfTests
         var text = QuoteSaveLoad.CreateEstimateText(document, customPriceQuote, prices);
         Assert(text.Contains("$2.00/in", StringComparison.Ordinal), "custom extra-inch price saved");
         Assert(text.Contains("2 #1 Boot", StringComparison.Ordinal) && text.Contains("3 #2 Boot", StringComparison.Ordinal), "multiple boot quantities saved");
+        Assert(text.Contains("1 Red Snips", StringComparison.Ordinal) && text.Contains("1 Turbo Shear", StringComparison.Ordinal), "new extras saved");
         var loaded = QuoteSaveLoad.Load(text);
         Assert(loaded.FormatVersion == AppVersion.SaveFormatVersion, "load format version");
         Assert(loaded.Input.CustomTrim.Pieces[0].Quantity == 2, "custom trim quantity load");

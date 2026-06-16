@@ -5,7 +5,7 @@ namespace CowPilot;
 
 sealed class MainForm : Form
 {
-    private static readonly Color ChangedColor = Color.FromArgb(191, 113, 0);
+    private static readonly Color ChangedColor = Color.Yellow;
     private static readonly Color SuccessColor = Color.FromArgb(46, 125, 50);
     private static readonly Color ErrorColor = Color.FromArgb(183, 28, 28);
     private static readonly Color CalculatingColor = Color.DimGray;
@@ -28,18 +28,20 @@ sealed class MainForm : Form
     private readonly Dictionary<MetalOption, TextBox> _grandTotalBoxes = [];
     private readonly Dictionary<string, NumericUpDown> _trimCounts = [];
     private readonly Dictionary<string, NumericUpDown> _trimExtras = [];
-    private readonly NumericUpDown[] _miscCounts = [CountBox(), CountBox(), CountBox(), CountBox(), CountBox(), CountBox()];
+    private readonly NumericUpDown[] _miscCounts = [CountBox(), CountBox(), CountBox(), CountBox(), CountBox(), CountBox(), CountBox(), CountBox(), CountBox(), CountBox()];
     private readonly NumericUpDown[] _bootCounts = QuoteCalculator.BootCatalog.Select(_ => CountBox()).ToArray();
     private readonly CustomTrimControl _customTrim = new();
     private readonly NumericUpDown _customTrimQuantity = CountBox(1);
     private readonly ListBox _customTrimPiecesList = new() { Height = 100, IntegralHeight = false };
     private readonly ListBox _customTrimVerticesList = new() { Height = 130, IntegralHeight = false };
     private readonly ListBox _customTrimSegmentsList = new() { Height = 90, IntegralHeight = false };
+    private readonly ComboBox _customOriginSelector = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 90 };
+    private readonly CheckBox _showCustomCoordinates = new() { Text = "Show vertex coordinates", AutoSize = true };
+    private readonly Panel _customCoordinatesPanel = new() { Dock = DockStyle.Top, AutoSize = true, Visible = false };
     private readonly NumericUpDown _customVertexX = InchBox();
     private readonly NumericUpDown _customVertexY = InchBox();
     private readonly NumericUpDown _customSegmentLength = PositiveInchBox(12);
-    private readonly NumericUpDown _customSegmentAngle = AngleBox();
-    private readonly TextBox _customSegmentPitch = new() { Width = 72 };
+    private readonly TextBox _customAngleOrPitch = new() { Width = 72 };
     private readonly Label _customPitchAngle = new() { Text = "Angle: 0°", AutoSize = true };
     private readonly Label _customTrimAdded = new() { Text = "Custom Trim Added", AutoSize = true, ForeColor = ChangedColor, Font = BoldFont(9), Visible = false };
     private readonly Label _customTrimSummary = new() { Dock = DockStyle.Bottom, Height = 24, BorderStyle = BorderStyle.Fixed3D };
@@ -295,7 +297,12 @@ sealed class MainForm : Form
         grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         var miscGrid = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2 };
-        string[] misc = ["Outside Closures (4)", "Inside Closures (4)", "Butyl Tape (45')", "Caulk", "Vented Closures (1)", "Universal Closures (20')"];
+        string[] misc =
+        [
+            "Outside Closures (4)", "Inside Closures (4)", "Butyl Tape (45')", "Caulk",
+            "Vented Closures (1)", "Universal Closures (20')", "Red Snips", "Green Snips",
+            "Blue Snips", "Turbo Shear"
+        ];
         for (int i = 0; i < misc.Length; i++)
         {
             miscGrid.Controls.Add(new Label { Text = misc[i], AutoSize = true }, 0, i);
@@ -330,26 +337,18 @@ sealed class MainForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        var toolbar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
-        var newPiece = new Button { Text = "New Piece", AutoSize = true };
-        var recenter = new Button { Text = "Re-center", AutoSize = true };
-        var undo = new Button { Text = "Undo", AutoSize = true };
-        var clear = new Button { Text = "Clear", AutoSize = true };
-        var colorSide = new Button { Text = "Color Side", AutoSize = true };
-        var zoomIn = new Button { Text = "+", AutoSize = true };
-        var zoomOut = new Button { Text = "-", AutoSize = true };
+        var toolbar = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden, Dock = DockStyle.Fill };
         var snap = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 90 };
         snap.Items.AddRange(new object[] { "1/16\"", "1/8\"", "1/4\"", "1/2\"", "1\"", "1 ft" });
-        snap.SelectedIndex = 1;
+        snap.SelectedIndex = 4;
         snap.SelectedIndexChanged += (_, _) => _customTrim.SnapInches = snap.SelectedIndex switch { 0 => 1f / 16f, 1 => 1f / 8f, 2 => 0.25f, 3 => 0.5f, 4 => 1f, _ => 12f };
-        newPiece.Click += (_, _) => _customTrim.BeginNewPiece();
-        recenter.Click += (_, _) => _customTrim.Recenter();
-        undo.Click += (_, _) => _customTrim.Undo();
-        clear.Click += (_, _) => _customTrim.ClearPieces();
-        colorSide.Click += (_, _) => _customTrim.ToggleColorSide();
-        zoomIn.Click += (_, _) => _customTrim.Zoom(1.25f);
-        zoomOut.Click += (_, _) => _customTrim.Zoom(0.8f);
-        toolbar.Controls.AddRange([new Label { Text = "Snap", AutoSize = true }, snap, _customTrimPiece, new Label { Text = "Qty", AutoSize = true }, _customTrimQuantity, newPiece, recenter, undo, clear, colorSide, zoomOut, zoomIn]);
+        toolbar.Items.Add(new ToolStripLabel("Snap"));
+        toolbar.Items.Add(new ToolStripControlHost(snap));
+        toolbar.Items.Add(ToolbarButton("R", "Re-center", (_, _) => _customTrim.Recenter()));
+        toolbar.Items.Add(ToolbarButton("X", "Clear custom trim", (_, _) => ClearCustomTrim()));
+        toolbar.Items.Add(ToolbarButton("C", "Color side", (_, _) => _customTrim.ToggleColorSide()));
+        toolbar.Items.Add(new ToolStripSeparator());
+        toolbar.Items.Add(new ToolStripControlHost(_customTrimPiece));
         root.Controls.Add(toolbar, 0, 0);
         root.SetColumnSpan(toolbar, 2);
         root.Controls.Add(_customTrim, 0, 1);
@@ -362,11 +361,10 @@ sealed class MainForm : Form
 
     private Control BuildCustomTrimSidebar()
     {
-        var panel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1, Padding = new Padding(6) };
+        var panel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, Padding = new Padding(6) };
         panel.RowStyles.Add(new RowStyle(SizeType.Percent, 28));
-        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 36));
-        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 26));
-        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 52));
+        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
 
         _customTrimPiecesList.SelectedIndexChanged += (_, _) =>
         {
@@ -381,70 +379,69 @@ sealed class MainForm : Form
             if (index >= vertices.Count) return;
             SetSidebarVertexValues(vertices[index]);
         };
-        _customSegmentAngle.ValueChanged += (_, _) => UpdatePitchAnglePreview();
-        _customSegmentPitch.TextChanged += (_, _) => UpdatePitchAnglePreview();
-
-        panel.Controls.Add(Group("Pieces", _customTrimPiecesList), 0, 0);
-
-        var vertexGrid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 6 };
-        vertexGrid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        vertexGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        vertexGrid.Controls.Add(_customTrimVerticesList, 0, 0);
-        vertexGrid.SetColumnSpan(_customTrimVerticesList, 2);
-        vertexGrid.Controls.Add(new Label { Text = "X", AutoSize = true }, 0, 1);
-        vertexGrid.Controls.Add(_customVertexX, 1, 1);
-        vertexGrid.Controls.Add(new Label { Text = "Y", AutoSize = true }, 0, 2);
-        vertexGrid.Controls.Add(_customVertexY, 1, 2);
-        var addVertex = new Button { Text = "Add Vertex", AutoSize = true };
-        var updateVertex = new Button { Text = "Update Vertex", AutoSize = true };
-        var setOrigin = new Button { Text = "Set Origin", AutoSize = true };
-        addVertex.Click += (_, _) => _customTrim.AddVertex(SidebarPoint());
-        updateVertex.Click += (_, _) =>
+        _customTrimSegmentsList.SelectedIndexChanged += (_, _) => LoadSelectedSegment();
+        _customOriginSelector.SelectedIndexChanged += (_, _) =>
         {
-            if (_customTrimVerticesList.SelectedIndex >= 0) _customTrim.UpdateVertex(_customTrimVerticesList.SelectedIndex, SidebarPoint());
+            if (!_syncingCustomTrimSidebar && _customOriginSelector.SelectedIndex >= 0) _customTrim.SelectedOriginIndex = _customOriginSelector.SelectedIndex;
         };
-        setOrigin.Click += (_, _) =>
-        {
-            if (_customTrimVerticesList.SelectedIndex >= 0) _customTrim.SelectedOriginIndex = _customTrimVerticesList.SelectedIndex;
-        };
-        var vertexButtons = new FlowLayoutPanel { AutoSize = true, WrapContents = true };
-        vertexButtons.Controls.AddRange([addVertex, updateVertex, setOrigin]);
-        vertexGrid.Controls.Add(vertexButtons, 0, 3);
-        vertexGrid.SetColumnSpan(vertexButtons, 2);
-        vertexGrid.Controls.Add(new Label { Text = "Lengths", AutoSize = true, Font = BoldFont(9) }, 0, 4);
-        vertexGrid.SetColumnSpan(vertexGrid.GetControlFromPosition(0, 4)!, 2);
-        vertexGrid.Controls.Add(_customTrimSegmentsList, 0, 5);
-        vertexGrid.SetColumnSpan(_customTrimSegmentsList, 2);
-        panel.Controls.Add(Group("Vertices", vertexGrid), 0, 1);
+        _customAngleOrPitch.TextChanged += (_, _) => UpdateAnglePreview();
+        _showCustomCoordinates.CheckedChanged += (_, _) => _customCoordinatesPanel.Visible = _showCustomCoordinates.Checked;
+        _customVertexX.ValueChanged += (_, _) => UpdateSelectedVertexFromFields();
+        _customVertexY.ValueChanged += (_, _) => UpdateSelectedVertexFromFields();
 
-        var segmentGrid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 5 };
+        var pieceGrid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3 };
+        pieceGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        pieceGrid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        pieceGrid.Controls.Add(_customTrimPiecesList, 0, 0);
+        pieceGrid.SetColumnSpan(_customTrimPiecesList, 2);
+        pieceGrid.Controls.Add(new Label { Text = "Qty", AutoSize = true }, 0, 1);
+        pieceGrid.Controls.Add(_customTrimQuantity, 1, 1);
+        pieceGrid.Controls.Add(new Label { Text = "Origin", AutoSize = true }, 0, 2);
+        pieceGrid.Controls.Add(_customOriginSelector, 1, 2);
+        panel.Controls.Add(Group("Pieces", pieceGrid), 0, 0);
+
+        var segmentGrid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 6 };
         segmentGrid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         segmentGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        segmentGrid.Controls.Add(new Label { Text = "Length", AutoSize = true }, 0, 0);
-        segmentGrid.Controls.Add(_customSegmentLength, 1, 0);
-        segmentGrid.Controls.Add(new Label { Text = "Bend angle", AutoSize = true }, 0, 1);
-        segmentGrid.Controls.Add(_customSegmentAngle, 1, 1);
-        segmentGrid.Controls.Add(new Label { Text = "Pitch", AutoSize = true }, 0, 2);
-        segmentGrid.Controls.Add(_customSegmentPitch, 1, 2);
+        segmentGrid.Controls.Add(_customTrimSegmentsList, 0, 0);
+        segmentGrid.SetColumnSpan(_customTrimSegmentsList, 2);
+        segmentGrid.Controls.Add(new Label { Text = "Length", AutoSize = true }, 0, 1);
+        segmentGrid.Controls.Add(_customSegmentLength, 1, 1);
+        segmentGrid.Controls.Add(new Label { Text = "Angle/Pitch", AutoSize = true }, 0, 2);
+        segmentGrid.Controls.Add(_customAngleOrPitch, 1, 2);
         segmentGrid.Controls.Add(_customPitchAngle, 0, 3);
         segmentGrid.SetColumnSpan(_customPitchAngle, 2);
-        var addAngleSegment = new Button { Text = "Add Bend Segment", AutoSize = true };
-        var addPitchSegment = new Button { Text = "Add Pitch Segment", AutoSize = true };
-        addAngleSegment.Click += (_, _) => _customTrim.AddBendSegment((double)_customSegmentLength.Value, (double)_customSegmentAngle.Value);
-        addPitchSegment.Click += (_, _) => AddPitchSegment();
-        var segmentButtons = new FlowLayoutPanel { AutoSize = true, WrapContents = true };
-        segmentButtons.Controls.AddRange([addAngleSegment, addPitchSegment]);
-        segmentGrid.Controls.Add(segmentButtons, 0, 4);
-        segmentGrid.SetColumnSpan(segmentButtons, 2);
-        panel.Controls.Add(Group("Exact Segment", segmentGrid), 0, 2);
-
+        var applySegment = new Button { Text = "Apply Segment", AutoSize = true };
+        applySegment.Click += (_, _) => ApplySegment();
+        segmentGrid.Controls.Add(applySegment, 0, 4);
+        segmentGrid.SetColumnSpan(applySegment, 2);
         var note = new Label
         {
-            Text = "Coordinates use inches. First vertex can be 0,0; bend angle turns from the last face. Pitch uses rise/run from horizontal.",
+            Text = "Enter degrees, or pitch like 3/12.",
+            AutoSize = false,
             Dock = DockStyle.Fill,
-            AutoSize = true
+            Height = 40
         };
-        panel.Controls.Add(note, 0, 3);
+        segmentGrid.Controls.Add(note, 0, 5);
+        segmentGrid.SetColumnSpan(note, 2);
+        panel.Controls.Add(Group("Faces", segmentGrid), 0, 1);
+
+        var coordGrid = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2 };
+        coordGrid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        coordGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        coordGrid.Controls.Add(_customTrimVerticesList, 0, 0);
+        coordGrid.SetColumnSpan(_customTrimVerticesList, 2);
+        coordGrid.Controls.Add(new Label { Text = "X", AutoSize = true }, 0, 1);
+        coordGrid.Controls.Add(_customVertexX, 1, 1);
+        coordGrid.Controls.Add(new Label { Text = "Y", AutoSize = true }, 0, 2);
+        coordGrid.Controls.Add(_customVertexY, 1, 2);
+        _customCoordinatesPanel.Controls.Add(coordGrid);
+        var coordinateStack = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
+        coordinateStack.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        coordinateStack.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        coordinateStack.Controls.Add(_showCustomCoordinates, 0, 0);
+        coordinateStack.Controls.Add(_customCoordinatesPanel, 0, 1);
+        panel.Controls.Add(Group("Coordinates", coordinateStack), 0, 2);
         return panel;
     }
 
@@ -455,6 +452,7 @@ sealed class MainForm : Form
         {
             int selectedPiece = _customTrim.SelectedPieceIndex;
             int selectedVertex = _customTrimVerticesList.SelectedIndex;
+            int selectedSegment = _customTrimSegmentsList.SelectedIndex;
             _customTrimPiecesList.Items.Clear();
             for (int i = 0; i < _customTrim.PieceCount; i++)
             {
@@ -465,11 +463,13 @@ sealed class MainForm : Form
 
             _customTrimVerticesList.Items.Clear();
             _customTrimSegmentsList.Items.Clear();
+            _customOriginSelector.Items.Clear();
             var vertices = _customTrim.SelectedVertices;
             for (int i = 0; i < vertices.Count; i++)
             {
                 string origin = i == _customTrim.SelectedOriginIndex ? " origin" : "";
                 _customTrimVerticesList.Items.Add($"{i + 1}: X {Num(vertices[i].X)}\"  Y {Num(vertices[i].Y)}\"{origin}");
+                _customOriginSelector.Items.Add($"Vertex {i + 1}");
             }
             for (int i = 1; i < vertices.Count; i++)
             {
@@ -477,8 +477,13 @@ sealed class MainForm : Form
                 double angle = Math.Atan2(vertices[i].Y - vertices[i - 1].Y, vertices[i].X - vertices[i - 1].X) * 180.0 / Math.PI;
                 _customTrimSegmentsList.Items.Add($"{i}-{i + 1}: {Num(length)}\" @ {Num(angle)}°");
             }
+            if (_customTrim.SelectedOriginIndex >= 0 && _customTrim.SelectedOriginIndex < _customOriginSelector.Items.Count)
+            {
+                _customOriginSelector.SelectedIndex = _customTrim.SelectedOriginIndex;
+            }
             if (selectedVertex >= 0 && selectedVertex < _customTrimVerticesList.Items.Count) _customTrimVerticesList.SelectedIndex = selectedVertex;
             else if (_customTrimVerticesList.Items.Count > 0) _customTrimVerticesList.SelectedIndex = _customTrimVerticesList.Items.Count - 1;
+            if (selectedSegment >= 0 && selectedSegment < _customTrimSegmentsList.Items.Count) _customTrimSegmentsList.SelectedIndex = selectedSegment;
             if (_customTrimVerticesList.SelectedIndex >= 0 && _customTrimVerticesList.SelectedIndex < vertices.Count)
             {
                 SetSidebarVertexValues(vertices[_customTrimVerticesList.SelectedIndex]);
@@ -506,26 +511,63 @@ sealed class MainForm : Form
 
     private PointF SidebarPoint() => new((float)_customVertexX.Value, (float)_customVertexY.Value);
 
-    private void AddPitchSegment()
+    private void LoadSelectedSegment()
     {
-        if (!TryParsePitch(_customSegmentPitch.Text, out double rise, out double run))
+        if (_syncingCustomTrimSidebar || _customTrimSegmentsList.SelectedIndex < 0) return;
+        var vertices = _customTrim.SelectedVertices;
+        int endIndex = _customTrimSegmentsList.SelectedIndex + 1;
+        if (endIndex >= vertices.Count) return;
+        PointF from = vertices[endIndex - 1];
+        PointF to = vertices[endIndex];
+        _syncingCustomTrimSidebar = true;
+        try
         {
-            SetStatus("Pitch must be entered like 3/12.", ErrorColor, Color.White);
-            return;
+            _customSegmentLength.Value = ClampDecimal((decimal)Math.Sqrt(Math.Pow(to.X - from.X, 2) + Math.Pow(to.Y - from.Y, 2)), _customSegmentLength);
+            _customAngleOrPitch.Text = Num(Math.Atan2(to.Y - from.Y, to.X - from.X) * 180.0 / Math.PI);
+            UpdateAnglePreview();
         }
-        _customTrim.AddSegmentFromPitch((double)_customSegmentLength.Value, rise, run);
-        _customSegmentAngle.Value = ClampDecimal((decimal)(Math.Atan2(rise, run) * 180.0 / Math.PI), _customSegmentAngle);
-        UpdatePitchAnglePreview();
+        finally
+        {
+            _syncingCustomTrimSidebar = false;
+        }
     }
 
-    private void UpdatePitchAnglePreview()
+    private void ApplySegment()
     {
-        double angle = (double)_customSegmentAngle.Value;
-        if (TryParsePitch(_customSegmentPitch.Text, out double rise, out double run))
+        if (!TryParseAngleOrPitch(_customAngleOrPitch.Text, out double angle))
         {
-            angle = Math.Atan2(rise, run) * 180.0 / Math.PI;
+            SetStatus("Angle must be degrees or pitch like 3/12.", ErrorColor, Color.White);
+            return;
         }
-        _customPitchAngle.Text = $"Angle: {Num(angle)}°";
+        int selectedSegment = _customTrimSegmentsList.SelectedIndex;
+        if (selectedSegment >= 0) _customTrim.UpdateSegment(selectedSegment, (double)_customSegmentLength.Value, angle);
+        else _customTrim.AddBendSegment((double)_customSegmentLength.Value, angle);
+        UpdateAnglePreview();
+    }
+
+    private void UpdateSelectedVertexFromFields()
+    {
+        if (_syncingCustomTrimSidebar || !_customCoordinatesPanel.Visible || _customTrimVerticesList.SelectedIndex < 0) return;
+        _customTrim.UpdateVertex(_customTrimVerticesList.SelectedIndex, SidebarPoint());
+    }
+
+    private void UpdateAnglePreview()
+    {
+        _customPitchAngle.Text = TryParseAngleOrPitch(_customAngleOrPitch.Text, out double angle)
+            ? $"Angle: {Num(angle)}°"
+            : "Angle: invalid";
+    }
+
+    private static bool TryParseAngleOrPitch(string text, out double angle)
+    {
+        angle = 0;
+        if (text.Contains('/'))
+        {
+            if (!TryParsePitch(text, out double rise, out double run)) return false;
+            angle = Math.Atan2(rise, run) * 180.0 / Math.PI;
+            return true;
+        }
+        return double.TryParse(text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out angle);
     }
 
     private static bool TryParsePitch(string text, out double rise, out double run)
@@ -623,7 +665,8 @@ sealed class MainForm : Form
         Extra("Deluxe Corners"));
 
     private MiscSelection CurrentMisc() => new((int)_miscCounts[0].Value, (int)_miscCounts[1].Value, (int)_miscCounts[2].Value,
-        (int)_miscCounts[3].Value, (int)_miscCounts[4].Value, (int)_miscCounts[5].Value, _bootCounts.Select(n => (int)n.Value).ToArray());
+        (int)_miscCounts[3].Value, (int)_miscCounts[4].Value, (int)_miscCounts[5].Value, (int)_miscCounts[6].Value,
+        (int)_miscCounts[7].Value, (int)_miscCounts[8].Value, (int)_miscCounts[9].Value, _bootCounts.Select(n => (int)n.Value).ToArray());
 
     private void ApplyInput(QuoteInput input)
     {
@@ -659,16 +702,29 @@ sealed class MainForm : Form
 
     private void SetMisc(MiscSelection misc)
     {
-        int[] values = [misc.OutsideClosures, misc.InsideClosures, misc.ButylTape, misc.Caulk, misc.VentedClosures, misc.UniversalClosures];
+        int[] values =
+        [
+            misc.OutsideClosures, misc.InsideClosures, misc.ButylTape, misc.Caulk, misc.VentedClosures,
+            misc.UniversalClosures, misc.RedSnips, misc.GreenSnips, misc.BlueSnips, misc.TurboShear
+        ];
         for (int i = 0; i < values.Length; i++) _miscCounts[i].Value = values[i];
         for (int i = 0; i < _bootCounts.Length; i++) _bootCounts[i].Value = misc.BootCount(i);
     }
 
     private void NewQuote()
     {
-        ApplyInput(new QuoteInput("", ScrewOption.OneInch, false, "", "", false, TrimSelection.Empty, MiscSelection.Empty, CustomTrimState.Empty));
+        if (!ConfirmDiscardWork()) return;
+        ApplyInput(new QuoteInput("", ScrewOption.OneInch, false, "0", "0", false, TrimSelection.Empty, MiscSelection.Empty, CustomTrimState.Empty));
         _customer.Clear(); _phone.Clear(); _color.Clear(); _notes.Clear();
+        ClearQuoteOutputs();
         ResetSavedSnapshot();
+    }
+
+    private void ClearCustomTrim()
+    {
+        if (_customTrim.State.Pieces.Count == 0) return;
+        if (!ConfirmDiscardWork(true)) return;
+        _customTrim.ClearPieces();
     }
 
     private bool SaveAs()
@@ -730,6 +786,31 @@ sealed class MainForm : Form
         if (_lastQuote != null) return true;
         MessageBox.Show(this, _status.Text, "Cannot Save Quote", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         return false;
+    }
+
+    private void ClearQuoteOutputs()
+    {
+        _lastQuote = null;
+        _formatted.Clear();
+        _totalLf.Clear();
+        _suggestedScrews.Text = "Suggested: 0";
+        _suggestedLapScrews.Text = "Suggested: 0";
+        foreach (var box in _subtotalBoxes.Values.Concat(_grandTotalBoxes.Values)) box.Clear();
+        _centerOfBalanceClipboardText = "";
+        _centerOfBalance.Text = "";
+        _weight.Text = "";
+        SetStatus("Ready", CalculatingColor, Color.White);
+    }
+
+    private bool ConfirmDiscardWork(bool forcePrompt = false)
+    {
+        if (!forcePrompt && !_isDirty) return true;
+        using var dialog = new UnsavedChangesDialog();
+        dialog.ShowDialog(this);
+        if (dialog.Choice == UnsavedChoice.Cancel) return false;
+        if (dialog.Choice == UnsavedChoice.SaveAs) return SaveAs();
+        if (dialog.Choice == UnsavedChoice.QuickSave) return QuickSave();
+        return true;
     }
 
     private void ApplySuggestedScrews()
@@ -992,6 +1073,31 @@ sealed class MainForm : Form
 
     private static decimal ClampDecimal(decimal value, NumericUpDown box) => Math.Min(box.Maximum, Math.Max(box.Minimum, value));
     private static Font BoldFont(float size) => new("Segoe UI", size, FontStyle.Bold);
+    private static ToolStripButton ToolbarButton(string glyph, string tooltip, EventHandler click)
+    {
+        var button = new ToolStripButton
+        {
+            DisplayStyle = ToolStripItemDisplayStyle.Image,
+            Image = BuildTextIcon(glyph),
+            Text = tooltip,
+            ToolTipText = tooltip
+        };
+        button.Click += click;
+        return button;
+    }
+
+    private static Image BuildTextIcon(string text)
+    {
+        var image = new Bitmap(16, 16);
+        using var g = Graphics.FromImage(image);
+        g.Clear(Color.Transparent);
+        using var font = new Font("Segoe UI", 9, FontStyle.Bold);
+        using var brush = new SolidBrush(Color.Black);
+        SizeF size = g.MeasureString(text, font);
+        g.DrawString(text, font, brush, (16 - size.Width) / 2f, (16 - size.Height) / 2f - 1);
+        return image;
+    }
+
     private static Image BuildSaveIcon()
     {
         var image = new Bitmap(16, 16);
