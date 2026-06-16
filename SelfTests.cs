@@ -46,6 +46,14 @@ static class SelfTests
         Assert(loaded.FormatVersion == AppVersion.SaveFormatVersion, "load format version");
         Assert(loaded.Input.CustomTrim.Pieces[0].Quantity == 2, "custom trim quantity load");
         Assert(loaded.Input.CustomTrim.Pieces[0].Vertices.Count == 3, "custom trim vertices load");
+
+        string releaseJson = """{"version":"v9.8.7","url":"https://github.com/AlecBurr/Cow-Pilot/blob/main/release/CowPilot-9.8.7-win-x64.zip"}""";
+        Assert(UpdateChecker.TryReadLatestManifest(releaseJson, out string latest, out string? downloadUrl), "update manifest parse");
+        Assert(latest == "9.8.7" && downloadUrl!.EndsWith("CowPilot-9.8.7-win-x64.zip", StringComparison.Ordinal), "update manifest values");
+        string encoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(releaseJson));
+        Assert(UpdateChecker.TryReadLatestManifestFromGitHubContent($$"""{"content":"{{encoded}}"}""", out latest, out _), "github content manifest parse");
+        Assert(UpdateChecker.IsNewerVersion("v9.8.7", AppVersion.Version), "newer release compare");
+        Assert(!UpdateChecker.IsNewerVersion(AppVersion.Version, AppVersion.Version), "same release compare");
         Console.WriteLine("Cow Pilot self-tests passed.");
     }
 

@@ -1089,6 +1089,16 @@ sealed class MainForm : Form
         SyncCustomTrimSidebar();
     }
 
+    protected override async void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        UpdateCheckResult? update = await UpdateChecker.CheckLatestAsync();
+        if (update is not { IsNewer: true }) return;
+        string message = $"Cow Pilot {update.LatestVersion} is available.\r\n\r\nCurrent version: {AppVersion.Version}.\r\nDownload the newest zip from the Cow Pilot GitHub repo.";
+        if (!string.IsNullOrWhiteSpace(update.DownloadUrl)) message += $"\r\n\r\n{update.DownloadUrl}";
+        MessageBox.Show(this, message, "Cow Pilot Update Available", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         if (_isDirty)

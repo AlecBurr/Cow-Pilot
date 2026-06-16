@@ -1,0 +1,7 @@
+{
+    "url":  "https://github.com/AlecBurr/Cow-Pilot/blob/main/release/CowPilot-1.1.4-win-x64.zip",
+    "selfContained":  true,
+    "version":  "1.1.4",
+    "platform":  "win-x64",
+    "package":  "CowPilot-1.1.4-win-x64.zip"
+}
