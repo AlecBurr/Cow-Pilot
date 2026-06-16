@@ -62,7 +62,7 @@ Compress-Archive -Path (Join-Path $publishDir "*") -DestinationPath $zipPath -Fo
 @{
     version = $version
     package = "CowPilot-$version-win-x64.zip"
-    url = "https://github.com/AlecBurr/Cow-Pilot/blob/main/release/CowPilot-$version-win-x64.zip"
+    url = "https://github.com/AlecBurr/Cow-Pilot/releases/download/v$version/CowPilot-$version-win-x64.zip"
     selfContained = $true
     platform = "win-x64"
 } | ConvertTo-Json | Set-Content -LiteralPath $manifestPath

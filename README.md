@@ -4,7 +4,7 @@ Cow Pilot is the C#/.NET Windows Forms replacement for the Java panel calculator
 
 ## Download
 
-For normal Windows use, open the private repo's `release` folder and download:
+For normal Windows use, open the private repo's **Releases** page and download:
 
 ```text
 CowPilot-1.1.4-win-x64.zip
@@ -38,6 +38,6 @@ dotnet run -c Release -- --self-test
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-release.ps1
 ```
 
-The generated zip and `release\latest.json` are written under `release\` so they can be committed and downloaded directly from the private repo.
+The generated zip is written under `release\` for upload to the matching GitHub Release. `release\latest.json` is committed so the app can check the current version remotely.
 
 Current app version: `1.1.4`.
