@@ -8,7 +8,7 @@ static class SelfTests
         Assert(QuoteCalculator.ParseLengthInInches("12'6\"") == 150, "feet and inches parse");
         Assert(QuoteCalculator.ParseLengthInInches("144") == 144, "raw inches parse");
 
-        var misc = MiscSelection.Empty with { BootCounts = NewBootCounts((0, 2)) };
+        var misc = MiscSelection.Empty with { BootCounts = NewBootCounts((0, 2), (1, 3)) };
         var input = new QuoteInput(
             "2x10'\r\n1x12'6\"",
             ScrewOption.OneInch,
@@ -40,6 +40,7 @@ static class SelfTests
             "Test Customer", "555-0100", "Red", "Round trip", input);
         var text = QuoteSaveLoad.CreateEstimateText(document, customPriceQuote, prices);
         Assert(text.Contains("$2.00/in", StringComparison.Ordinal), "custom extra-inch price saved");
+        Assert(text.Contains("2 #1 Boot", StringComparison.Ordinal) && text.Contains("3 #2 Boot", StringComparison.Ordinal), "multiple boot quantities saved");
         var loaded = QuoteSaveLoad.Load(text);
         Assert(loaded.FormatVersion == AppVersion.SaveFormatVersion, "load format version");
         Assert(loaded.Input.CustomTrim.Pieces[0].Quantity == 2, "custom trim quantity load");
@@ -49,7 +50,7 @@ static class SelfTests
 
     private static int[] NewBootCounts(params (int Index, int Count)[] values)
     {
-        var counts = new int[QuoteCalculator.BootNames.Length];
+        var counts = new int[QuoteCalculator.BootCatalog.Length];
         foreach (var value in values) counts[value.Index] = value.Count;
         return counts;
     }

@@ -5,8 +5,22 @@ namespace CowPilot;
 
 sealed class CustomTrimControl : Control
 {
+    private static readonly Color AxisColor = Color.FromArgb(120, 120, 120);
+    private static readonly Color VertexColor = Color.White;
+    private static readonly Color LabelTextColor = Color.White;
+    private static readonly Color LabelBackgroundColor = Color.FromArgb(42, 42, 42);
+    private static readonly Color[] BrightPalette =
+    [
+        Color.FromArgb(91, 166, 255),
+        Color.FromArgb(255, 193, 7),
+        Color.FromArgb(102, 187, 106),
+        Color.FromArgb(236, 64, 122),
+        Color.FromArgb(38, 198, 218),
+        Color.FromArgb(255, 112, 67),
+        Color.FromArgb(171, 71, 188),
+        Color.FromArgb(212, 225, 87)
+    ];
     private readonly List<CustomTrimPieceState> _pieces = [];
-    private readonly Random _random = new();
     private PointF? _drawingStart;
     private PointF? _previewPoint;
     private int _drawingPieceIndex = -1;
@@ -32,7 +46,7 @@ sealed class CustomTrimControl : Control
     {
         DoubleBuffered = true;
         BackColor = Color.FromArgb(_preferences.CustomTrimBackgroundArgb);
-        ForeColor = Color.FromArgb(_preferences.CustomTrimLabelTextArgb);
+        ForeColor = LabelTextColor;
         Dock = DockStyle.Fill;
         TabStop = true;
     }
@@ -84,8 +98,7 @@ sealed class CustomTrimControl : Control
         _preferences = settings.Preferences;
         _prices = settings.Prices;
         BackColor = Color.FromArgb(_preferences.CustomTrimBackgroundArgb);
-        ForeColor = Color.FromArgb(_preferences.CustomTrimLabelTextArgb);
-        foreach (var piece in _pieces) EnsurePieceColor(piece);
+        ForeColor = LabelTextColor;
         Invalidate();
     }
 
@@ -93,7 +106,6 @@ sealed class CustomTrimControl : Control
     {
         _pieces.Clear();
         _pieces.AddRange(state.Pieces.Select(CopyPiece));
-        foreach (var piece in _pieces) EnsurePieceColor(piece);
         _selectedPieceIndex = _pieces.Count == 0 ? -1 : 0;
         _drawingPieceIndex = _selectedPieceIndex;
         _drawingStart = null;
@@ -109,7 +121,6 @@ sealed class CustomTrimControl : Control
     public void BeginNewPiece()
     {
         var piece = new CustomTrimPieceState(1, []);
-        EnsurePieceColor(piece);
         _pieces.Add(piece);
         _selectedPieceIndex = _pieces.Count - 1;
         _drawingPieceIndex = _selectedPieceIndex;
@@ -373,7 +384,6 @@ sealed class CustomTrimControl : Control
     private int CreatePieceFrom(PointF point)
     {
         var piece = new CustomTrimPieceState(SelectedPiece?.Quantity ?? 1, [point]);
-        EnsurePieceColor(piece);
         _pieces.Add(piece);
         _selectedPieceIndex = _pieces.Count - 1;
         return _selectedPieceIndex;
@@ -413,7 +423,7 @@ sealed class CustomTrimControl : Control
         using var majorPen = new Pen(Color.FromArgb(_preferences.CustomTrimMajorGridArgb), _preferences.CustomTrimMajorGridThickness);
         if (minor >= 6) DrawGridLines(g, minorPen, minor, center);
         if (major >= 6) DrawGridLines(g, majorPen, major, center);
-        using var axisPen = new Pen(Color.FromArgb(_preferences.CustomTrimAxisArgb), _preferences.CustomTrimMajorGridThickness);
+        using var axisPen = new Pen(AxisColor, _preferences.CustomTrimMajorGridThickness);
         g.DrawLine(axisPen, 0, center.Y, Width, center.Y);
         g.DrawLine(axisPen, center.X, 0, center.X, Height);
     }
@@ -429,8 +439,7 @@ sealed class CustomTrimControl : Control
         for (int p = 0; p < _pieces.Count; p++)
         {
             var piece = _pieces[p];
-            EnsurePieceColor(piece);
-            using var pen = PiecePen(piece, p == _selectedPieceIndex);
+            using var pen = PiecePen(p, p == _selectedPieceIndex);
             if (p == _selectedPieceIndex) DrawMarquee(g, piece);
             for (int i = 1; i < piece.Vertices.Count; i++) DrawSegment(g, pen, piece.Vertices[i - 1], piece.Vertices[i], true);
             if (_preferences.ShowCustomTrimAngleArcs) DrawAngleMarkers(g, piece);
@@ -439,7 +448,7 @@ sealed class CustomTrimControl : Control
             {
                 Point point = ModelToScreen(piece.Vertices[i]);
                 bool selectedOrigin = p == _selectedPieceIndex && i == SelectedOriginIndex;
-                using var brush = new SolidBrush(selectedOrigin ? Color.FromArgb(_preferences.CustomTrimOriginArgb) : Color.FromArgb(_preferences.CustomTrimVertexArgb));
+                using var brush = new SolidBrush(selectedOrigin ? Color.FromArgb(_preferences.CustomTrimOriginArgb) : VertexColor);
                 float size = _preferences.CustomTrimVertexSize;
                 g.FillEllipse(brush, point.X - size / 2f, point.Y - size / 2f, size, size);
             }
@@ -469,8 +478,8 @@ sealed class CustomTrimControl : Control
         int x = (a.X + b.X) / 2;
         int y = (a.Y + b.Y) / 2;
         SizeF size = g.MeasureString(text, Font);
-        using var background = new SolidBrush(Color.FromArgb(_preferences.CustomTrimLabelBackgroundArgb));
-        using var textBrush = new SolidBrush(Color.FromArgb(_preferences.CustomTrimLabelTextArgb));
+        using var background = new SolidBrush(LabelBackgroundColor);
+        using var textBrush = new SolidBrush(LabelTextColor);
         g.FillRectangle(background, x - size.Width / 2 - 3, y - size.Height / 2 - 2, size.Width + 6, size.Height + 4);
         g.DrawString(text, Font, textBrush, x - size.Width / 2, y - size.Height / 2);
     }
@@ -478,7 +487,7 @@ sealed class CustomTrimControl : Control
     private void DrawQuantity(Graphics g, CustomTrimPieceState piece)
     {
         Point point = ModelToScreen(piece.Vertices[0]);
-        using var textBrush = new SolidBrush(Color.FromArgb(_preferences.CustomTrimLabelTextArgb));
+        using var textBrush = new SolidBrush(LabelTextColor);
         g.DrawString($"Qty {piece.Quantity}", Font, textBrush, point.X + 8, point.Y - 18);
     }
 
@@ -504,12 +513,12 @@ sealed class CustomTrimControl : Control
         g.DrawString("Color side", Font, brush, end.X + 6, end.Y - 6);
     }
 
-    private Pen PiecePen(CustomTrimPieceState piece, bool selected)
+    private Pen PiecePen(int pieceIndex, bool selected)
     {
         Color color = selected
             ? Color.FromArgb(_preferences.CustomTrimSelectedLineArgb)
-            : PieceColor(piece);
-        var pen = new Pen(color, selected ? _preferences.CustomTrimSelectedLineThickness : _preferences.CustomTrimLineThickness)
+            : PieceColor(pieceIndex);
+        var pen = new Pen(color, selected ? _preferences.CustomTrimLineThickness + 0.5f : _preferences.CustomTrimLineThickness)
         {
             StartCap = LineCap.Round,
             EndCap = LineCap.Round
@@ -517,32 +526,10 @@ sealed class CustomTrimControl : Control
         return pen;
     }
 
-    private Color PieceColor(CustomTrimPieceState piece)
+    private Color PieceColor(int pieceIndex)
     {
-        if (_preferences.UseRandomCustomTrimPieceColors && piece.ColorArgb is int argb) return Color.FromArgb(argb);
+        if (_preferences.UseRandomCustomTrimPieceColors) return BrightPalette[Math.Abs(pieceIndex) % BrightPalette.Length];
         return Color.FromArgb(_preferences.CustomTrimLineArgb);
-    }
-
-    private void EnsurePieceColor(CustomTrimPieceState piece)
-    {
-        if (!_preferences.UseRandomCustomTrimPieceColors)
-        {
-            piece.ColorArgb = null;
-            return;
-        }
-        if (piece.ColorArgb != null) return;
-        piece.ColorArgb = RandomBrightColor().ToArgb();
-    }
-
-    private Color RandomBrightColor()
-    {
-        Color color;
-        do
-        {
-            color = Color.FromArgb(_random.Next(85, 256), _random.Next(85, 256), _random.Next(85, 256));
-        }
-        while (color.GetBrightness() < 0.48f);
-        return color;
     }
 
     private void DrawMarquee(Graphics g, CustomTrimPieceState piece)
@@ -570,7 +557,7 @@ sealed class CustomTrimControl : Control
             using var pen = new Pen(Color.FromArgb(_preferences.CustomTrimSelectedLineArgb), 1.5f) { DashStyle = DashStyle.Dot };
             g.DrawArc(pen, vertex.X - radius, vertex.Y - radius, radius * 2, radius * 2, start, sweep);
             string text = $"{Num(angle)}°";
-            using var brush = new SolidBrush(Color.FromArgb(_preferences.CustomTrimLabelTextArgb));
+            using var brush = new SolidBrush(LabelTextColor);
             g.DrawString(text, Font, brush, vertex.X + 12, vertex.Y + 12);
         }
     }
@@ -647,7 +634,6 @@ sealed class CustomTrimControl : Control
 
     private static CustomTrimPieceState CopyPiece(CustomTrimPieceState piece) => new(piece.Quantity, piece.Vertices.Select(p => new PointF(p.X, p.Y)).ToList())
     {
-        ColorArgb = piece.ColorArgb,
         OriginIndex = piece.OriginIndex
     };
     private static float Mod(float value, float modulus) => (value % modulus + modulus) % modulus;

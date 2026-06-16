@@ -131,7 +131,7 @@ static class QuoteSaveLoad
         AppendLine(sb, misc.Caulk, "Ultra 1000 Caulk", nl);
         AppendLine(sb, misc.VentedClosures, "Vented Closures (Individual)", nl);
         AppendLine(sb, misc.UniversalClosures, "Universal Expanding Closures 20'", nl);
-        for (int i = 0; i < QuoteCalculator.BootNames.Length; i++) AppendLine(sb, misc.BootCount(i), QuoteCalculator.BootNames[i], nl);
+        for (int i = 0; i < QuoteCalculator.BootCatalog.Length; i++) AppendLine(sb, misc.BootCount(i), QuoteCalculator.BootCatalog[i].Name, nl);
         sb.Append(nl);
     }
 

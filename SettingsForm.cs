@@ -83,10 +83,6 @@ sealed class SettingsForm : Form
         folderRow.Controls.AddRange([folder, browse]);
         AddRow(general, "Quick save folder", folderRow);
         AddRow(general, "Auto-calculate delay (ms)", Number(_settings.General.AutoRecalculateDelayMs, 150, 5000, 0, value => _settings.General.AutoRecalculateDelayMs = (int)value));
-        AddRow(general, "Confirm unsaved close", Check(_settings.General.ConfirmUnsavedChanges, value => _settings.General.ConfirmUnsavedChanges = value));
-        AddRow(general, "Start maximized", Check(_settings.General.StartMaximized, value => _settings.General.StartMaximized = value));
-        AddRow(general, "Open debug console on startup", Check(_settings.General.OpenDebugConsoleOnStartup, value => _settings.General.OpenDebugConsoleOnStartup = value));
-        AddRow(general, "Recalculate after loading quote", Check(_settings.General.RecalculateAfterLoadingQuote, value => _settings.General.RecalculateAfterLoadingQuote = value));
         AddGroup(page, "General", general);
         return page;
     }
@@ -116,17 +112,12 @@ sealed class SettingsForm : Form
         AddRow(grid, "Graph background", ColorButton(_settings.Preferences.CustomTrimBackgroundArgb, value => _settings.Preferences.CustomTrimBackgroundArgb = value));
         AddRow(grid, "Minor grid color", ColorButton(_settings.Preferences.CustomTrimMinorGridArgb, value => _settings.Preferences.CustomTrimMinorGridArgb = value));
         AddRow(grid, "Major grid color", ColorButton(_settings.Preferences.CustomTrimMajorGridArgb, value => _settings.Preferences.CustomTrimMajorGridArgb = value));
-        AddRow(grid, "Axis color", ColorButton(_settings.Preferences.CustomTrimAxisArgb, value => _settings.Preferences.CustomTrimAxisArgb = value));
         AddRow(grid, "Line color", ColorButton(_settings.Preferences.CustomTrimLineArgb, value => _settings.Preferences.CustomTrimLineArgb = value));
         AddRow(grid, "Selected line color", ColorButton(_settings.Preferences.CustomTrimSelectedLineArgb, value => _settings.Preferences.CustomTrimSelectedLineArgb = value));
-        AddRow(grid, "Vertex color", ColorButton(_settings.Preferences.CustomTrimVertexArgb, value => _settings.Preferences.CustomTrimVertexArgb = value));
         AddRow(grid, "Selected origin color", ColorButton(_settings.Preferences.CustomTrimOriginArgb, value => _settings.Preferences.CustomTrimOriginArgb = value));
-        AddRow(grid, "Label text color", ColorButton(_settings.Preferences.CustomTrimLabelTextArgb, value => _settings.Preferences.CustomTrimLabelTextArgb = value));
-        AddRow(grid, "Label background", ColorButton(_settings.Preferences.CustomTrimLabelBackgroundArgb, value => _settings.Preferences.CustomTrimLabelBackgroundArgb = value));
         AddRow(grid, "Minor grid thickness", Number(_settings.Preferences.CustomTrimMinorGridThickness, 0.25, 8, 2, value => _settings.Preferences.CustomTrimMinorGridThickness = (float)value));
         AddRow(grid, "Major grid thickness", Number(_settings.Preferences.CustomTrimMajorGridThickness, 0.25, 8, 2, value => _settings.Preferences.CustomTrimMajorGridThickness = (float)value));
         AddRow(grid, "Line thickness", Number(_settings.Preferences.CustomTrimLineThickness, 0.5, 12, 2, value => _settings.Preferences.CustomTrimLineThickness = (float)value));
-        AddRow(grid, "Selected line thickness", Number(_settings.Preferences.CustomTrimSelectedLineThickness, 0.5, 12, 2, value => _settings.Preferences.CustomTrimSelectedLineThickness = (float)value));
         AddRow(grid, "Vertex size", Number(_settings.Preferences.CustomTrimVertexSize, 4, 24, 2, value => _settings.Preferences.CustomTrimVertexSize = (float)value));
         AddGroup(page, "Custom Trim Graph", grid);
         return page;

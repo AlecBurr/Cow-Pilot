@@ -5,11 +5,23 @@ namespace CowPilot;
 
 static class QuoteCalculator
 {
-    public static readonly string[] BootNames =
+    public static readonly BootCatalogItem[] BootCatalog =
     [
-        "#1 Boot", "#2 Boot", "#3 Boot", "#4 Boot", "#5 Boot", "#7 Boot", "#8 Boot", "#9 Boot",
-        "#801 Zipper Boot", "#802 Zipper Boot", "#803 Zipper Boot",
-        "Hi-Temp #3 Boot", "Hi-Temp #5 Boot", "Hi-Temp #8 Boot", "Hi-Temp #9 Boot"
+        new("#1 Boot", 12.00),
+        new("#2 Boot", 13.00),
+        new("#3 Boot", 15.00),
+        new("#4 Boot", 20.00),
+        new("#5 Boot", 25.00),
+        new("#7 Boot", 35.00),
+        new("#8 Boot", 40.00),
+        new("#9 Boot", 85.00),
+        new("#801 Zipper Boot", 30.00),
+        new("#802 Zipper Boot", 40.00),
+        new("#803 Zipper Boot", 60.00),
+        new("Hi-Temp #3 Boot", 35.00),
+        new("Hi-Temp #5 Boot", 40.00),
+        new("Hi-Temp #8 Boot", 96.50),
+        new("Hi-Temp #9 Boot", 220.00)
     ];
 
     private static readonly Regex MeasurementPattern = new(@"^\s*(\d+)\s*(?:x|X|@)\s*(.+?)\s*$", RegexOptions.Compiled);
@@ -198,7 +210,7 @@ static class QuoteCalculator
     private static double MiscPrice(MiscSelection misc, PriceSettings prices)
     {
         double boots = 0;
-        for (int i = 0; i < BootNames.Length; i++) boots += misc.BootCount(i) * prices.Boot(i).Price;
+        for (int i = 0; i < BootCatalog.Length; i++) boots += misc.BootCount(i) * prices.Boot(i).Price;
         return misc.OutsideClosures * prices.MiscItem("OutsideClosures").Price
             + misc.InsideClosures * prices.MiscItem("InsideClosures").Price
             + misc.ButylTape * prices.MiscItem("ButylTape").Price
@@ -271,3 +283,5 @@ static class QuoteCalculator
 
     private sealed record MetalData(MetalOption Option, string Label, bool Painted, bool UsesGauge26TrimExtra);
 }
+
+sealed record BootCatalogItem(string Name, double Price);

@@ -5,7 +5,6 @@ namespace CowPilot;
 
 sealed class MainForm : Form
 {
-    private const string NoAutoCalcTag = "NoAutoCalc";
     private static readonly Color ChangedColor = Color.FromArgb(191, 113, 0);
     private static readonly Color SuccessColor = Color.FromArgb(46, 125, 50);
     private static readonly Color ErrorColor = Color.FromArgb(183, 28, 28);
@@ -30,17 +29,17 @@ sealed class MainForm : Form
     private readonly Dictionary<string, NumericUpDown> _trimCounts = [];
     private readonly Dictionary<string, NumericUpDown> _trimExtras = [];
     private readonly NumericUpDown[] _miscCounts = [CountBox(), CountBox(), CountBox(), CountBox(), CountBox(), CountBox()];
-    private readonly NumericUpDown[] _bootCounts = QuoteCalculator.BootNames.Select(_ => CountBox()).ToArray();
+    private readonly NumericUpDown[] _bootCounts = QuoteCalculator.BootCatalog.Select(_ => CountBox()).ToArray();
     private readonly CustomTrimControl _customTrim = new();
     private readonly NumericUpDown _customTrimQuantity = CountBox(1);
-    private readonly ListBox _customTrimPiecesList = new() { Height = 100, IntegralHeight = false, Tag = NoAutoCalcTag };
-    private readonly ListBox _customTrimVerticesList = new() { Height = 130, IntegralHeight = false, Tag = NoAutoCalcTag };
-    private readonly ListBox _customTrimSegmentsList = new() { Height = 90, IntegralHeight = false, Tag = NoAutoCalcTag };
+    private readonly ListBox _customTrimPiecesList = new() { Height = 100, IntegralHeight = false };
+    private readonly ListBox _customTrimVerticesList = new() { Height = 130, IntegralHeight = false };
+    private readonly ListBox _customTrimSegmentsList = new() { Height = 90, IntegralHeight = false };
     private readonly NumericUpDown _customVertexX = InchBox();
     private readonly NumericUpDown _customVertexY = InchBox();
     private readonly NumericUpDown _customSegmentLength = PositiveInchBox(12);
     private readonly NumericUpDown _customSegmentAngle = AngleBox();
-    private readonly TextBox _customSegmentPitch = new() { Width = 72, Tag = NoAutoCalcTag };
+    private readonly TextBox _customSegmentPitch = new() { Width = 72 };
     private readonly Label _customPitchAngle = new() { Text = "Angle: 0°", AutoSize = true };
     private readonly Label _customTrimAdded = new() { Text = "Custom Trim Added", AutoSize = true, ForeColor = ChangedColor, Font = BoldFont(9), Visible = false };
     private readonly Label _customTrimSummary = new() { Dock = DockStyle.Bottom, Height = 24, BorderStyle = BorderStyle.Fixed3D };
@@ -63,7 +62,7 @@ sealed class MainForm : Form
     {
         Text = $"{AppVersion.Name} version {AppVersion.Version}";
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? Icon;
-        WindowState = _settings.General.StartMaximized ? FormWindowState.Maximized : FormWindowState.Normal;
+        WindowState = FormWindowState.Maximized;
         MinimumSize = new Size(1100, 700);
 
         _screwButtons =
@@ -90,7 +89,7 @@ sealed class MainForm : Form
         shell.Controls.Add(_status, 0, 3);
         Controls.Add(shell);
 
-        WireAutoCalc(this);
+        WireAutoCalc();
         _timer.Tick += (_, _) => { _timer.Stop(); Recalculate(); };
         _customTrim.TrimChanged += (_, _) =>
         {
@@ -104,7 +103,6 @@ sealed class MainForm : Form
         };
         _useSuggested.CheckedChanged += (_, _) => ApplySuggestedScrews();
         ApplyRuntimeSettings();
-        Shown += (_, _) => { if (_settings.General.OpenDebugConsoleOnStartup) ShowConsole(); };
         _customTrimSummary.Text = _customTrim.Summary();
         SyncCustomTrimSidebar();
         ResetSavedSnapshot();
@@ -292,22 +290,35 @@ sealed class MainForm : Form
 
     private Control BuildMiscPanel()
     {
-        var grid = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 4 };
+        var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var miscGrid = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2 };
         string[] misc = ["Outside Closures (4)", "Inside Closures (4)", "Butyl Tape (45')", "Caulk", "Vented Closures (1)", "Universal Closures (20')"];
         for (int i = 0; i < misc.Length; i++)
         {
-            grid.Controls.Add(new Label { Text = misc[i], AutoSize = true }, 0, i);
-            grid.Controls.Add(_miscCounts[i], 1, i);
+            miscGrid.Controls.Add(new Label { Text = misc[i], AutoSize = true }, 0, i);
+            miscGrid.Controls.Add(_miscCounts[i], 1, i);
         }
-        for (int i = 0; i < QuoteCalculator.BootNames.Length; i++)
-        {
-            int row = i % 8;
-            int col = i < 8 ? 2 : 0;
-            if (i >= 8) row += misc.Length;
-            grid.Controls.Add(new Label { Text = QuoteCalculator.BootNames[i], AutoSize = true }, col, row);
-            grid.Controls.Add(_bootCounts[i], col + 1, row);
-        }
+        grid.Controls.Add(miscGrid, 0, 0);
+        grid.Controls.Add(BuildBootSelector(), 0, 1);
         return Group("Extras", grid);
+    }
+
+    private Control BuildBootSelector()
+    {
+        var grid = new TableLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, ColumnCount = 2 };
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        grid.Controls.Add(new Label { Text = "Boot Type", AutoSize = true, Font = BoldFont(9) }, 0, 0);
+        grid.Controls.Add(new Label { Text = "Qty", AutoSize = true, Font = BoldFont(9) }, 1, 0);
+        for (int i = 0; i < QuoteCalculator.BootCatalog.Length; i++)
+        {
+            grid.Controls.Add(new Label { Text = QuoteCalculator.BootCatalog[i].Name, AutoSize = true }, 0, i + 1);
+            grid.Controls.Add(_bootCounts[i], 1, i + 1);
+        }
+        return Group("Boots", grid);
     }
 
     private TabPage BuildCustomTrimTab()
@@ -373,7 +384,7 @@ sealed class MainForm : Form
         _customSegmentAngle.ValueChanged += (_, _) => UpdatePitchAnglePreview();
         _customSegmentPitch.TextChanged += (_, _) => UpdatePitchAnglePreview();
 
-        panel.Controls.Add(Group("Pieces", Stack(_customTrimPiecesList)), 0, 0);
+        panel.Controls.Add(Group("Pieces", _customTrimPiecesList), 0, 0);
 
         var vertexGrid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 6 };
         vertexGrid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -702,8 +713,7 @@ sealed class MainForm : Form
             _color.Text = doc.Color;
             _notes.Text = doc.Notes;
             ApplyInput(doc.Input);
-            if (_settings.General.RecalculateAfterLoadingQuote) Recalculate();
-            else MarkDirty();
+            Recalculate();
             ResetSavedSnapshot();
             LogDebug("Loaded quote: " + dialog.FileName);
         }
@@ -737,16 +747,20 @@ sealed class MainForm : Form
         MarkDirty();
     }
 
-    private void WireAutoCalc(Control root)
+    private void WireAutoCalc()
     {
-        foreach (Control control in root.Controls)
+        foreach (var textBox in new[] { _measurements, _screwBags, _lapScrewBags, _customer, _phone, _color, _notes })
         {
-            if (Equals(control.Tag, NoAutoCalcTag)) continue;
-            if (control is TextBox textBox) textBox.TextChanged += (_, _) => MarkDirty();
-            if (control is CheckBox checkBox) checkBox.CheckedChanged += (_, _) => MarkDirty();
-            if (control is RadioButton radioButton) radioButton.CheckedChanged += (_, _) => { HighlightSelectedScrew(); MarkDirty(); };
-            if (control is NumericUpDown numeric) numeric.ValueChanged += (_, _) => MarkDirty();
-            WireAutoCalc(control);
+            textBox.TextChanged += (_, _) => MarkDirty();
+        }
+        _militaryDiscount.CheckedChanged += (_, _) => MarkDirty();
+        foreach (var radioButton in _screwButtons)
+        {
+            radioButton.CheckedChanged += (_, _) => { HighlightSelectedScrew(); MarkDirty(); };
+        }
+        foreach (var numeric in _trimCounts.Values.Concat(_trimExtras.Values).Concat(_miscCounts).Concat(_bootCounts))
+        {
+            numeric.ValueChanged += (_, _) => MarkDirty();
         }
     }
 
@@ -874,7 +888,7 @@ sealed class MainForm : Form
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
-        if (_settings.General.ConfirmUnsavedChanges && _isDirty)
+        if (_isDirty)
         {
             using var dialog = new UnsavedChangesDialog();
             dialog.ShowDialog(this);
@@ -922,13 +936,6 @@ sealed class MainForm : Form
         return group;
     }
 
-    private static FlowLayoutPanel Stack(params Control[] controls)
-    {
-        var panel = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, AutoScroll = true, WrapContents = false };
-        panel.Controls.AddRange(controls);
-        return panel;
-    }
-
     private static Control Row(string label, Control input, Control? extra = null)
     {
         var panel = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
@@ -958,8 +965,7 @@ sealed class MainForm : Form
         Increment = 0.125m,
         Value = value,
         Width = 78,
-        TextAlign = HorizontalAlignment.Right,
-        Tag = NoAutoCalcTag
+        TextAlign = HorizontalAlignment.Right
     };
 
     private static NumericUpDown PositiveInchBox(decimal value = 0) => new()
@@ -970,8 +976,7 @@ sealed class MainForm : Form
         Increment = 0.125m,
         Value = Math.Max(0.001m, value),
         Width = 78,
-        TextAlign = HorizontalAlignment.Right,
-        Tag = NoAutoCalcTag
+        TextAlign = HorizontalAlignment.Right
     };
 
     private static NumericUpDown AngleBox(decimal value = 0) => new()
@@ -982,8 +987,7 @@ sealed class MainForm : Form
         Increment = 1,
         Value = value,
         Width = 78,
-        TextAlign = HorizontalAlignment.Right,
-        Tag = NoAutoCalcTag
+        TextAlign = HorizontalAlignment.Right
     };
 
     private static decimal ClampDecimal(decimal value, NumericUpDown box) => Math.Min(box.Maximum, Math.Max(box.Minimum, value));

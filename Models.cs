@@ -60,7 +60,7 @@ sealed record MiscSelection(
     int UniversalClosures,
     int[] BootCounts)
 {
-    public static MiscSelection Empty => new(0, 0, 0, 0, 0, 0, new int[QuoteCalculator.BootNames.Length]);
+    public static MiscSelection Empty => new(0, 0, 0, 0, 0, 0, new int[QuoteCalculator.BootCatalog.Length]);
 
     [JsonIgnore]
     public bool HasItems => OutsideClosures > 0 || InsideClosures > 0 || ButylTape > 0 || Caulk > 0
@@ -73,7 +73,6 @@ sealed class CustomTrimPieceState(int quantity, List<PointF> vertices)
 {
     public int Quantity { get; set; } = quantity;
     public List<PointF> Vertices { get; set; } = vertices;
-    public int? ColorArgb { get; set; }
     public int OriginIndex { get; set; }
 }
 
