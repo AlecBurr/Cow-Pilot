@@ -40,8 +40,9 @@ static class SelfTests
         var customPriceQuote = QuoteCalculator.Calculate(input, prices);
         Assert(customPriceQuote.Quotes[MetalOption.Galv29].Subtotal > quote.Quotes[MetalOption.Galv29].Subtotal, "custom metal price applied");
         Assert(QuoteCalculator.CustomTrimUnitPrice(input.CustomTrim.Pieces[0], prices) > QuoteCalculator.CustomTrimUnitPrice(input.CustomTrim.Pieces[0]), "custom trim bend price applied");
+        Assert(QuoteCalculator.CalculationTrace(input, prices).Any(line => line.Contains("grand total", StringComparison.Ordinal)), "calculation trace grand total");
 
-        var document = new QuoteDocument(AppVersion.SaveFormatVersion, AppVersion.Version, "06/15/2026 12:00:00",
+        var document = new QuoteDocument(AppVersion.SaveFormatVersion, AppVersion.Version, "06/15/2026 12:00:00 PM",
             "Test Customer", "555-0100", "Red", "Round trip", input);
         var text = QuoteSaveLoad.CreateEstimateText(document, customPriceQuote, prices);
         Assert(text.Contains("$2.00/in", StringComparison.Ordinal), "custom extra-inch price saved");

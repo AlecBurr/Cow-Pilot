@@ -170,6 +170,44 @@ static class QuoteCalculator
     public static string QuickbooksText(SortedDictionary<int, int> grouped)
         => string.Join(", ", grouped.Select(kvp => $"{kvp.Value} @ {FormatLength(kvp.Key)}"));
 
+    public static IReadOnlyList<string> CalculationTrace(QuoteInput input, PriceSettings? priceSettings = null)
+    {
+        PriceSettings prices = Prices(priceSettings);
+        var measurements = ParseMeasurements(input.MeasurementsText);
+        double totalLengthInFeet = measurements.Sum(m => m.Quantity * m.LengthInInches) / 12.0;
+        double suggestedScrewBags = CalculateSuggestedScrewBags(totalLengthInFeet, prices);
+        double suggestedLapScrewBags = CalculateLapScrewBags(totalLengthInFeet, input.Trim.Ridges, prices);
+        double chargedScrewBags = input.UseSuggestedScrews ? suggestedScrewBags : ParseNonNegative(input.ScrewBagsText, "Bags of Screws");
+        double chargedLapScrewBags = input.UseSuggestedScrews ? suggestedLapScrewBags : ParseNonNegative(input.LapScrewBagsText, "Bags of Lap");
+        double miscPrice = MiscPrice(input.Misc, prices);
+        double customTrimPrice = CustomTrimPrice(input.CustomTrim, prices);
+        var lines = new List<string>
+        {
+            $"Trace: total LF {Num(totalLengthInFeet)}, custom trim {Money(customTrimPrice)}, misc {Money(miscPrice)}",
+            $"Screws: suggested {Num(suggestedScrewBags)} bags/{Num(suggestedLapScrewBags)} lap, charged {Num(chargedScrewBags)} bags/{Num(chargedLapScrewBags)} lap"
+        };
+
+        foreach (var metal in Metals)
+        {
+            MetalPriceSetting metalPrice = prices.Metal(metal.Option);
+            double panelPrice = totalLengthInFeet * metalPrice.LinearFootPrice;
+            double trimPrice = TrimPrice(input.Trim, metal.UsesGauge26TrimExtra, prices);
+            double screwBagPrice = chargedScrewBags > 0 ? ScrewPrice(input.Screw, metal.Painted, prices) : 0;
+            double screwPrice = chargedScrewBags * screwBagPrice;
+            double lapBagPrice = chargedLapScrewBags > 0 ? metalPrice.LapScrewBagPrice : 0;
+            double lapScrewPrice = chargedLapScrewBags * lapBagPrice;
+            double beforeDiscount = panelPrice + trimPrice + customTrimPrice + miscPrice + screwPrice + lapScrewPrice;
+            double discount = input.MilitaryDiscount ? beforeDiscount * prices.MilitaryDiscountRate : 0;
+            double subtotal = beforeDiscount - discount;
+            double tax = subtotal * prices.TaxRate;
+            lines.Add($"{metal.Label}: panels {Num(totalLengthInFeet)} LF x {Money(metalPrice.LinearFootPrice)} = {Money(panelPrice)}");
+            lines.Add($"{metal.Label}: trim {Money(trimPrice)} + custom {Money(customTrimPrice)} + misc {Money(miscPrice)} + screws {Money(screwPrice)} + lap {Money(lapScrewPrice)} = {Money(beforeDiscount)}");
+            if (discount > 0) lines.Add($"{metal.Label}: discount {Money(discount)} -> subtotal {Money(subtotal)}");
+            lines.Add($"{metal.Label}: tax {Money(tax)} -> grand total {Money(subtotal + tax)}");
+        }
+        return lines;
+    }
+
     private static QuoteResult PriceQuote(MetalData metal, List<PanelMeasurement> measurements, TrimSelection trim, MiscSelection misc,
         double customTrimPrice, double totalLengthInFeet, double centerOfBalance, ScrewOption screw, double chargedScrewBags,
         double chargedLapScrewBags, bool militaryDiscount, PriceSettings prices)
@@ -278,6 +316,8 @@ static class QuoteCalculator
     private static MetalData Data(MetalOption option) => Metals.First(m => m.Option == option);
 
     private static double Distance(PointF a, PointF b) => Math.Sqrt(Math.Pow(b.X - a.X, 2) + Math.Pow(b.Y - a.Y, 2));
+    private static string Money(double value) => value.ToString("C", CultureInfo.GetCultureInfo("en-US"));
+    private static string Num(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
 
     private sealed record MetalData(MetalOption Option, string Label, bool Painted, bool UsesGauge26TrimExtra);
 }

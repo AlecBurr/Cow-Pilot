@@ -5,6 +5,7 @@ namespace CowPilot;
 
 sealed class MainForm : Form
 {
+    private const string QuoteFileExtension = ".cowpilot";
     private static readonly Color ChangedBoxColor = Color.LightBlue;
     private static readonly Color ChangedTextColor = Color.FromArgb(128, 24, 24);
     private static readonly Color SuccessColor = Color.FromArgb(46, 125, 50);
@@ -43,9 +44,7 @@ sealed class MainForm : Form
     private readonly NumericUpDown _customVertexX = InchBox();
     private readonly NumericUpDown _customVertexY = InchBox();
     private readonly NumericUpDown _customSegmentLength = PositiveInchBox(12);
-    private readonly TextBox _customAngleOrPitch = new() { Width = 92 };
     private readonly TextBox _customInteriorAngle = new() { Width = 92 };
-    private readonly Label _customPitchAngle = new() { Text = "Angle: 0 deg", AutoSize = true };
     private readonly Label _customTrimAdded = new() { Text = "Custom Trim Added", AutoSize = true, ForeColor = ChangedTextColor, Font = BoldFont(9), Visible = false };
     private readonly Label _customTrimSummary = new() { Dock = DockStyle.Bottom, Height = 24, BorderStyle = BorderStyle.Fixed3D };
     private readonly Label _customTrimPiece = new() { AutoSize = true, Text = "Piece: none" };
@@ -61,6 +60,7 @@ sealed class MainForm : Form
     private AppSettings _settings = SettingsStore.Load();
     private QuoteSet? _lastQuote;
     private string _centerOfBalanceClipboardText = "";
+    private string _currentSavePath = "";
     private string _savedSnapshot = "";
     private bool _isDirty;
     private bool _suppress;
@@ -71,6 +71,7 @@ sealed class MainForm : Form
         Text = $"{AppVersion.Name} version {AppVersion.Version}";
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? Icon;
         WindowState = FormWindowState.Maximized;
+        MaximizeBox = false;
         MinimumSize = new Size(1100, 700);
 
         _screwButtons =
@@ -87,18 +88,21 @@ sealed class MainForm : Form
         tabs.TabPages.Add(BuildQuoteTab());
         tabs.TabPages.Add(BuildCustomTrimTab());
         MainMenuStrip = BuildMenu();
-        var shell = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
-        shell.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        PrepareCustomTrimListBoxes();
+        var shell = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
         shell.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         shell.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         shell.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        shell.Controls.Add(MainMenuStrip, 0, 0);
-        shell.Controls.Add(BuildHeader(), 0, 1);
-        shell.Controls.Add(tabs, 0, 2);
-        shell.Controls.Add(_status, 0, 3);
+        shell.Controls.Add(BuildTopBar(), 0, 0);
+        shell.Controls.Add(tabs, 0, 1);
+        shell.Controls.Add(_status, 0, 2);
         Controls.Add(shell);
+        Controls.Add(_mascot);
+        PositionMascot();
+        _mascot.BringToFront();
 
         WireAutoCalc();
+        _console.VerboseCalculationRequested += (_, _) => PrintCalculationTrace();
         _customTrim.TrimChanged += (_, _) =>
         {
             RefreshCustomTrimUi();
@@ -123,8 +127,8 @@ sealed class MainForm : Form
         var file = new ToolStripMenuItem("File");
         file.DropDownItems.Add("New", null, (_, _) => NewQuote());
         file.DropDownItems.Add("Load...", null, (_, _) => LoadQuote());
+        file.DropDownItems.Add("Save", null, (_, _) => SaveQuote());
         file.DropDownItems.Add("Save as...", null, (_, _) => SaveAs());
-        file.DropDownItems.Add("Quick Save", null, (_, _) => QuickSave());
         file.DropDownItems.Add(new ToolStripSeparator());
         file.DropDownItems.Add("Exit", null, (_, _) => Close());
         menu.Items.Add(file);
@@ -146,30 +150,31 @@ sealed class MainForm : Form
         return menu;
     }
 
+    private Control BuildTopBar()
+    {
+        var top = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = false, Margin = Padding.Empty, Padding = Padding.Empty };
+        var menu = MainMenuStrip ?? throw new InvalidOperationException("Main menu is not initialized.");
+        menu.Dock = DockStyle.None;
+        top.Controls.Add(menu);
+        top.Controls.Add(BuildToolBar());
+        return top;
+    }
+
     private ToolStrip BuildToolBar()
     {
         var toolbar = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden };
+        toolbar.Items.Add(ToolbarButton(BuildNewIcon(), "New", (_, _) => NewQuote()));
+        toolbar.Items.Add(ToolbarButton(BuildOpenIcon(), "Load quote", (_, _) => LoadQuote()));
         var save = new ToolStripButton
         {
             DisplayStyle = ToolStripItemDisplayStyle.Image,
             Image = BuildSaveIcon(),
-            Text = "Quick Save",
-            ToolTipText = "Quick Save"
+            Text = "Save",
+            ToolTipText = "Save"
         };
-        save.Click += (_, _) => QuickSave();
+        save.Click += (_, _) => SaveQuote();
         toolbar.Items.Add(save);
         return toolbar;
-    }
-
-    private Control BuildHeader()
-    {
-        var header = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        header.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        header.Controls.Add(BuildToolBar(), 0, 0);
-        header.Controls.Add(_mascot, 1, 0);
-        return header;
     }
 
     private void LoadMascotImages()
@@ -199,6 +204,22 @@ sealed class MainForm : Form
         _mascotTimer.Start();
     }
 
+    private void PositionMascot()
+    {
+        _mascot.Location = new Point(Math.Max(0, ClientSize.Width - _mascot.Width - 12), 4);
+    }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        if (WindowState == FormWindowState.Normal)
+        {
+            WindowState = FormWindowState.Maximized;
+            return;
+        }
+        PositionMascot();
+    }
+
     private static int GifDurationMs(Image image)
     {
         const int frameDelayProperty = 0x5100;
@@ -211,6 +232,42 @@ sealed class MainForm : Form
         }
         return total <= 0 ? 1500 : total;
     }
+
+    private void PrepareCustomTrimListBoxes()
+    {
+        foreach (var list in new[] { _customTrimPiecesList, _customTrimSegmentsList, _customTrimAnglesList })
+        {
+            list.DrawMode = DrawMode.OwnerDrawFixed;
+            list.ItemHeight = 22;
+            list.DrawItem += DrawCustomTrimListItem;
+        }
+    }
+
+    private void DrawCustomTrimListItem(object? sender, DrawItemEventArgs e)
+    {
+        if (sender is not ListBox list || e.Index < 0) return;
+        int pieceIndex = list == _customTrimPiecesList ? e.Index : _customTrim.SelectedPieceIndex;
+        bool selected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
+        Color back = selected ? _customTrim.SelectedDisplayColor : _customTrim.PieceDisplayColor(pieceIndex);
+        using var background = new SolidBrush(back);
+        e.Graphics.FillRectangle(background, e.Bounds);
+
+        int x = e.Bounds.Left + 4;
+        if (list == _customTrimSegmentsList)
+        {
+            using var pen = new Pen(Contrast(back), 2);
+            int y = e.Bounds.Top + e.Bounds.Height / 2;
+            e.Graphics.DrawLine(pen, x, y + 4, x + 14, y - 4);
+            x += 20;
+        }
+
+        TextRenderer.DrawText(e.Graphics, list.Items[e.Index].ToString(), list.Font,
+            new Rectangle(x, e.Bounds.Top, e.Bounds.Width - (x - e.Bounds.Left), e.Bounds.Height),
+            Contrast(back), TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
+        e.DrawFocusRectangle();
+    }
+
+    private static Color Contrast(Color color) => color.GetBrightness() < 0.45 ? Color.White : Color.Black;
 
     private TabPage BuildQuoteTab()
     {
@@ -437,23 +494,14 @@ sealed class MainForm : Form
     private Control BuildCustomTrimSidebar()
     {
         var panel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, Padding = new Padding(6) };
-        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 26));
-        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 58));
-        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 16));
+        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 28));
+        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 36));
+        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 36));
 
         _customTrimPiecesList.SelectedIndexChanged += (_, _) =>
         {
             if (_syncingCustomTrimSidebar || _customTrimPiecesList.SelectedIndex < 0) return;
             _customTrim.SelectPiece(_customTrimPiecesList.SelectedIndex);
-        };
-        _customTrimVerticesList.SelectedIndexChanged += (_, _) =>
-        {
-            if (_syncingCustomTrimSidebar || _customTrimVerticesList.SelectedIndex < 0) return;
-            var vertices = _customTrim.SelectedVertices;
-            int index = _customTrimVerticesList.SelectedIndex;
-            if (index >= vertices.Count) return;
-            _customTrim.SelectVertex(index);
-            SetSidebarVertexValues(vertices[index]);
         };
         _customTrimSegmentsList.SelectedIndexChanged += (_, _) =>
         {
@@ -471,27 +519,21 @@ sealed class MainForm : Form
         {
             if (!_syncingCustomTrimSidebar && _customOriginSelector.SelectedIndex >= 0) _customTrim.SelectedOriginIndex = _customOriginSelector.SelectedIndex;
         };
-        _customAngleOrPitch.TextChanged += (_, _) =>
-        {
-            UpdateAnglePreview();
-            LiveUpdateSelectedFace();
-        };
         _customSegmentLength.ValueChanged += (_, _) => LiveUpdateSelectedFace();
         _customInteriorAngle.TextChanged += (_, _) => LiveUpdateSelectedAngle();
         _showCustomCoordinates.CheckedChanged += (_, _) => _customCoordinatesPanel.Visible = _showCustomCoordinates.Checked;
         _customVertexX.ValueChanged += (_, _) => UpdateSelectedVertexFromFields();
         _customVertexY.ValueChanged += (_, _) => UpdateSelectedVertexFromFields();
 
-        var pieceGrid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3 };
-        pieceGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        pieceGrid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        var pieceGrid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        pieceGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        pieceGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         _customTrimPiecesList.Dock = DockStyle.Fill;
         pieceGrid.Controls.Add(_customTrimPiecesList, 0, 0);
-        pieceGrid.SetColumnSpan(_customTrimPiecesList, 2);
-        pieceGrid.Controls.Add(new Label { Text = "Qty", AutoSize = true }, 0, 1);
-        pieceGrid.Controls.Add(_customTrimQuantity, 1, 1);
-        pieceGrid.Controls.Add(new Label { Text = "Origin", AutoSize = true }, 0, 2);
         var originPanel = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
+        originPanel.Controls.Add(new Label { Text = "Qty", AutoSize = true, TextAlign = ContentAlignment.MiddleLeft });
+        originPanel.Controls.Add(_customTrimQuantity);
+        originPanel.Controls.Add(new Label { Text = "Origin", AutoSize = true, TextAlign = ContentAlignment.MiddleLeft });
         var setOrigin = new Button { Text = "Set origin", AutoSize = true };
         setOrigin.Click += (_, _) =>
         {
@@ -500,36 +542,23 @@ sealed class MainForm : Form
                 SetStatus("Select a custom trim piece before setting origin.", ErrorColor, Color.White);
                 return;
             }
-            if (_customTrim.SetSelectedVertexAsOrigin())
-            {
-                SetStatus("Selected vertex set as origin.", SuccessColor, Color.White);
-                return;
-            }
             _customTrim.BeginOriginPick();
             SetStatus("Click a vertex to set the selected piece origin.", CalculatingColor, Color.White);
         };
         originPanel.Controls.Add(_customOriginSelector);
         originPanel.Controls.Add(setOrigin);
-        pieceGrid.Controls.Add(originPanel, 1, 2);
+        pieceGrid.Controls.Add(originPanel, 0, 1);
         panel.Controls.Add(Group("Pieces", pieceGrid), 0, 0);
 
-        var segmentGrid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 10 };
+        var segmentGrid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 4 };
         segmentGrid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         segmentGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        segmentGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        segmentGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 48));
-        segmentGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        segmentGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         segmentGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         segmentGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         segmentGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        segmentGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        segmentGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 34));
-        segmentGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        segmentGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        segmentGrid.Controls.Add(new Label { Text = "Faces", AutoSize = true }, 0, 0);
-        segmentGrid.SetColumnSpan(segmentGrid.GetControlFromPosition(0, 0)!, 2);
         _customTrimSegmentsList.Dock = DockStyle.Fill;
-        segmentGrid.Controls.Add(_customTrimSegmentsList, 0, 1);
+        segmentGrid.Controls.Add(_customTrimSegmentsList, 0, 0);
         segmentGrid.SetColumnSpan(_customTrimSegmentsList, 2);
         var faceActions = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
         var addFace = new Button { Text = "Add face", AutoSize = true };
@@ -538,48 +567,34 @@ sealed class MainForm : Form
         colorSide.Click += (_, _) => _customTrim.ToggleColorSide();
         faceActions.Controls.Add(addFace);
         faceActions.Controls.Add(colorSide);
-        segmentGrid.Controls.Add(faceActions, 0, 2);
+        segmentGrid.Controls.Add(faceActions, 0, 1);
         segmentGrid.SetColumnSpan(faceActions, 2);
-        segmentGrid.Controls.Add(new Label { Text = "Length", AutoSize = true }, 0, 3);
-        segmentGrid.Controls.Add(_customSegmentLength, 1, 3);
-        segmentGrid.Controls.Add(new Label { Text = "Angle/Pitch", AutoSize = true }, 0, 4);
-        segmentGrid.Controls.Add(_customAngleOrPitch, 1, 4);
-        segmentGrid.Controls.Add(_customPitchAngle, 0, 5);
-        segmentGrid.SetColumnSpan(_customPitchAngle, 2);
-        segmentGrid.Controls.Add(new Label { Text = "Angles", AutoSize = true }, 0, 6);
-        segmentGrid.SetColumnSpan(segmentGrid.GetControlFromPosition(0, 6)!, 2);
+        segmentGrid.Controls.Add(new Label { Text = "Length", AutoSize = true }, 0, 2);
+        segmentGrid.Controls.Add(_customSegmentLength, 1, 2);
+        panel.Controls.Add(Group("Faces", segmentGrid), 0, 1);
+
+        var angleGrid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 4 };
+        angleGrid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        angleGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        angleGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        angleGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        angleGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        angleGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         _customTrimAnglesList.Dock = DockStyle.Fill;
-        segmentGrid.Controls.Add(_customTrimAnglesList, 0, 7);
-        segmentGrid.SetColumnSpan(_customTrimAnglesList, 2);
-        segmentGrid.Controls.Add(new Label { Text = "Selected angle", AutoSize = true }, 0, 8);
-        segmentGrid.Controls.Add(_customInteriorAngle, 1, 8);
+        angleGrid.Controls.Add(_customTrimAnglesList, 0, 0);
+        angleGrid.SetColumnSpan(_customTrimAnglesList, 2);
+        angleGrid.Controls.Add(new Label { Text = "Selected angle", AutoSize = true }, 0, 1);
+        angleGrid.Controls.Add(_customInteriorAngle, 1, 1);
         var note = new Label
         {
-            Text = "Faces edit live. Enter degrees, or pitch like 3/12.",
+            Text = "Enter degrees, or pitch like 3/12.",
             AutoSize = false,
             Dock = DockStyle.Fill,
             Height = 40
         };
-        segmentGrid.Controls.Add(note, 0, 9);
-        segmentGrid.SetColumnSpan(note, 2);
-        panel.Controls.Add(Group("Faces", segmentGrid), 0, 1);
-
-        var coordGrid = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2 };
-        coordGrid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        coordGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        coordGrid.Controls.Add(_customTrimVerticesList, 0, 0);
-        coordGrid.SetColumnSpan(_customTrimVerticesList, 2);
-        coordGrid.Controls.Add(new Label { Text = "X", AutoSize = true }, 0, 1);
-        coordGrid.Controls.Add(_customVertexX, 1, 1);
-        coordGrid.Controls.Add(new Label { Text = "Y", AutoSize = true }, 0, 2);
-        coordGrid.Controls.Add(_customVertexY, 1, 2);
-        _customCoordinatesPanel.Controls.Add(coordGrid);
-        var coordinateStack = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
-        coordinateStack.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        coordinateStack.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        coordinateStack.Controls.Add(_showCustomCoordinates, 0, 0);
-        coordinateStack.Controls.Add(_customCoordinatesPanel, 0, 1);
-        panel.Controls.Add(Group("Coordinates", coordinateStack), 0, 2);
+        angleGrid.Controls.Add(note, 0, 2);
+        angleGrid.SetColumnSpan(note, 2);
+        panel.Controls.Add(Group("Angles", angleGrid), 0, 2);
         return panel;
     }
 
@@ -589,7 +604,6 @@ sealed class MainForm : Form
         try
         {
             int selectedPiece = _customTrim.SelectedPieceIndex;
-            int selectedVertex = _customTrim.SelectedVertexIndex;
             int selectedSegment = _customTrim.SelectedSegmentIndex;
             int selectedAngle = _customTrim.SelectedAngleVertexIndex > 0 ? _customTrim.SelectedAngleVertexIndex - 1 : -1;
             _customTrimPiecesList.Items.Clear();
@@ -625,14 +639,8 @@ sealed class MainForm : Form
             {
                 _customOriginSelector.SelectedIndex = _customTrim.SelectedOriginIndex;
             }
-            if (selectedVertex >= 0 && selectedVertex < _customTrimVerticesList.Items.Count) _customTrimVerticesList.SelectedIndex = selectedVertex;
-            else if (selectedSegment < 0 && selectedAngle < 0 && _customTrimVerticesList.Items.Count > 0) _customTrimVerticesList.SelectedIndex = _customTrimVerticesList.Items.Count - 1;
             if (selectedSegment >= 0 && selectedSegment < _customTrimSegmentsList.Items.Count) _customTrimSegmentsList.SelectedIndex = selectedSegment;
             if (selectedAngle >= 0 && selectedAngle < _customTrimAnglesList.Items.Count) _customTrimAnglesList.SelectedIndex = selectedAngle;
-            if (_customTrimVerticesList.SelectedIndex >= 0 && _customTrimVerticesList.SelectedIndex < vertices.Count)
-            {
-                SetSidebarVertexValues(vertices[_customTrimVerticesList.SelectedIndex]);
-            }
         }
         finally
         {
@@ -668,8 +676,6 @@ sealed class MainForm : Form
         try
         {
             _customSegmentLength.Value = ClampDecimal((decimal)SegmentLength(from, to), _customSegmentLength);
-            _customAngleOrPitch.Text = Num(SegmentAngle(from, to));
-            UpdateAnglePreview();
         }
         finally
         {
@@ -696,12 +702,7 @@ sealed class MainForm : Form
 
     private void AddCustomFace()
     {
-        if (!TryParseAngleOrPitch(_customAngleOrPitch.Text, out double angle))
-        {
-            SetStatus("Angle must be degrees or pitch like 3/12.", ErrorColor, Color.White);
-            return;
-        }
-        _customTrim.AddBendSegment((double)_customSegmentLength.Value, angle);
+        _customTrim.AddBendSegment((double)_customSegmentLength.Value, 0);
         RefreshCustomTrimUi();
         if (_customTrimSegmentsList.Items.Count > 0)
         {
@@ -713,7 +714,10 @@ sealed class MainForm : Form
     private void LiveUpdateSelectedFace()
     {
         if (_syncingCustomTrimSidebar || _customTrimSegmentsList.SelectedIndex < 0) return;
-        if (!TryParseAngleOrPitch(_customAngleOrPitch.Text, out double angle)) return;
+        var vertices = _customTrim.SelectedVertices;
+        int segment = _customTrimSegmentsList.SelectedIndex;
+        if (segment < 0 || segment + 1 >= vertices.Count) return;
+        double angle = SegmentAngle(vertices[segment], vertices[segment + 1]);
         _customTrim.UpdateSegment(_customTrimSegmentsList.SelectedIndex, (double)_customSegmentLength.Value, angle);
     }
 
@@ -721,21 +725,22 @@ sealed class MainForm : Form
     {
         if (_syncingCustomTrimSidebar || _customTrimAnglesList.SelectedIndex < 0) return;
         if (!TryParseAngleOrPitch(_customInteriorAngle.Text, out double benderAngle)) return;
+        double normalized = NormalizeDegrees(benderAngle);
+        if (!_customInteriorAngle.Text.Contains('/') && Math.Abs(normalized - benderAngle) > 0.001)
+        {
+            _syncingCustomTrimSidebar = true;
+            _customInteriorAngle.Text = Num(normalized);
+            _customInteriorAngle.SelectionStart = _customInteriorAngle.TextLength;
+            _syncingCustomTrimSidebar = false;
+        }
         int vertexIndex = _customTrimAnglesList.SelectedIndex + 1;
-        _customTrim.UpdateInteriorAngle(vertexIndex, benderAngle - 180);
+        _customTrim.UpdateInteriorAngle(vertexIndex, normalized - 180);
     }
 
     private void UpdateSelectedVertexFromFields()
     {
         if (_syncingCustomTrimSidebar || !_customCoordinatesPanel.Visible || _customTrimVerticesList.SelectedIndex < 0) return;
         _customTrim.UpdateVertex(_customTrimVerticesList.SelectedIndex, SidebarPoint());
-    }
-
-    private void UpdateAnglePreview()
-    {
-        _customPitchAngle.Text = TryParseAngleOrPitch(_customAngleOrPitch.Text, out double angle)
-            ? $"Angle: {Num(angle)} deg"
-            : "Angle: invalid";
     }
 
     private static bool TryParseAngleOrPitch(string text, out double angle)
@@ -768,7 +773,7 @@ sealed class MainForm : Form
     private static double BenderAngle(PointF previous, PointF vertex, PointF next)
     {
         double sweep = SignedInteriorSweep(previous, vertex, next);
-        return Math.Abs(Math.Abs(sweep) - 180) < 0.001 ? 0 : 180 + sweep;
+        return Math.Abs(Math.Abs(sweep) - 180) < 0.001 ? 0 : NormalizeDegrees(180 + sweep);
     }
 
     private static double SignedInteriorSweep(PointF previous, PointF vertex, PointF next)
@@ -779,6 +784,13 @@ sealed class MainForm : Form
         while (sweep > 180) sweep -= 360;
         while (sweep < -180) sweep += 360;
         return sweep;
+    }
+
+    private static double NormalizeDegrees(double angle)
+    {
+        while (angle > 180) angle -= 360;
+        while (angle < -180) angle += 360;
+        return angle;
     }
 
     private void RefreshCustomTrimUi()
@@ -837,7 +849,6 @@ sealed class MainForm : Form
             }
             SetStatus("Quote recalculated.", SuccessColor, Color.White);
             HighlightSelectedScrew();
-            LogCalculation(input, _lastQuote);
         }
         catch (Exception ex)
         {
@@ -915,6 +926,7 @@ sealed class MainForm : Form
     private void NewQuote()
     {
         if (!ConfirmDiscardWork()) return;
+        _currentSavePath = "";
         ApplyInput(new QuoteInput("", ScrewOption.OneInch, false, "0", "0", false, TrimSelection.Empty, MiscSelection.Empty, CustomTrimState.Empty));
         _customer.Clear(); _phone.Clear(); _color.Clear(); _notes.Clear();
         Recalculate();
@@ -934,28 +946,32 @@ sealed class MainForm : Form
     private bool SaveAs()
     {
         if (!EnsureQuote()) return false;
-        using var dialog = new SaveFileDialog { Filter = "Text files (*.txt)|*.txt", FileName = "cow-pilot-estimate.txt" };
+        using var dialog = new SaveFileDialog
+        {
+            Filter = "Cow Pilot quote (*.cowpilot)|*.cowpilot|Text files (*.txt)|*.txt|All files (*.*)|*.*",
+            DefaultExt = "cowpilot",
+            AddExtension = true,
+            FileName = DefaultQuoteFileName()
+        };
         if (dialog.ShowDialog(this) != DialogResult.OK) return false;
         SaveTo(dialog.FileName);
         return true;
     }
 
-    private bool QuickSave()
+    private bool SaveQuote()
     {
         if (!EnsureQuote()) return false;
-        string dir = string.IsNullOrWhiteSpace(_settings.General.QuickSaveFolder)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Cow Pilot Estimates")
-            : _settings.General.QuickSaveFolder;
-        Directory.CreateDirectory(dir);
-        SaveTo(Path.Combine(dir, $"cow-pilot-estimate-{DateTime.Now:yyyyMMdd-HHmmss}.txt"));
+        if (string.IsNullOrWhiteSpace(_currentSavePath)) return SaveAs();
+        SaveTo(_currentSavePath);
         return true;
     }
 
     private void SaveTo(string path)
     {
-        var doc = new QuoteDocument(AppVersion.SaveFormatVersion, AppVersion.Version, DateTime.Now.ToString("MM/dd/yyyy HH:mm:ss"),
+        var doc = new QuoteDocument(AppVersion.SaveFormatVersion, AppVersion.Version, DateTime.Now.ToString("MM/dd/yyyy hh:mm:ss tt", CultureInfo.InvariantCulture),
             _customer.Text, _phone.Text, _color.Text, _notes.Text, CurrentInput());
         File.WriteAllText(path, QuoteSaveLoad.CreateEstimateText(doc, _lastQuote!, _settings.Prices));
+        _currentSavePath = path;
         ResetSavedSnapshot();
         SetStatus($"Saved: {path}", SuccessColor, Color.White);
         LogDebug("Saved quote: " + path);
@@ -963,7 +979,7 @@ sealed class MainForm : Form
 
     private void LoadQuote()
     {
-        using var dialog = new OpenFileDialog { Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*" };
+        using var dialog = new OpenFileDialog { Filter = "Cow Pilot quote (*.cowpilot)|*.cowpilot|Text files (*.txt)|*.txt|All files (*.*)|*.*" };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         try
         {
@@ -973,6 +989,7 @@ sealed class MainForm : Form
             _color.Text = doc.Color;
             _notes.Text = doc.Notes;
             ApplyInput(doc.Input);
+            _currentSavePath = dialog.FileName;
             Recalculate();
             ResetSavedSnapshot();
             LogDebug("Loaded quote: " + dialog.FileName);
@@ -990,6 +1007,17 @@ sealed class MainForm : Form
         if (_lastQuote != null) return true;
         MessageBox.Show(this, _status.Text, "Cannot Save Quote", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         return false;
+    }
+
+    private string DefaultQuoteFileName()
+    {
+        string name = _customer.Text.Trim();
+        if (name.Length == 0) name = $"cow-pilot-estimate-{DateTime.Now:yyyyMMdd-hhmmss-tt}";
+        foreach (char invalid in Path.GetInvalidFileNameChars()) name = name.Replace(invalid, '-');
+        name = name.Trim();
+        if (name.Length == 0) name = "cow-pilot-estimate";
+        if (name.Length > 80) name = name[..80].Trim();
+        return Path.ChangeExtension(name, QuoteFileExtension);
     }
 
     private void ClearQuoteOutputs()
@@ -1013,7 +1041,7 @@ sealed class MainForm : Form
         dialog.ShowDialog(this);
         if (dialog.Choice == UnsavedChoice.Cancel) return false;
         if (dialog.Choice == UnsavedChoice.SaveAs) return SaveAs();
-        if (dialog.Choice == UnsavedChoice.QuickSave) return QuickSave();
+        if (dialog.Choice == UnsavedChoice.Save) return SaveQuote();
         return true;
     }
 
@@ -1155,23 +1183,18 @@ sealed class MainForm : Form
 
     private void LogDebug(string message) => _console.Log(message);
 
-    private void LogCalculation(QuoteInput input, QuoteSet quote)
+    private void PrintCalculationTrace()
     {
-        int panelCount = quote.GroupedPanels.Sum(item => item.Value);
-        LogDebug($"Calculation: panels={panelCount}, totalLF={Num(quote.TotalLengthInFeet)}, trimQty={TrimCount(input.Trim)}, trimExtraIn={Num(input.Trim.TotalExtraInches)}, miscQty={MiscCount(input.Misc)}, customTrim={Money(quote.CustomTrimPrice)}, discount={quote.MilitaryDiscountApplied}");
-        LogDebug($"Screws: {QuoteCalculator.ScrewLabel(input.Screw)}, suggested={Num(quote.SuggestedScrewBags)} bags/{Num(quote.SuggestedLapScrewBags)} lap, charged={Num(quote.ChargedScrewBags)} bags/{Num(quote.ChargedLapScrewBags)} lap");
-        foreach (var result in quote.Quotes.Values.OrderBy(result => result.Metal))
+        try
         {
-            LogDebug($"{QuoteCalculator.MetalLabel(result.Metal)}: subtotal={Money(result.Subtotal)}, grand={Money(result.GrandTotal)}, weight={Num(result.TotalWeight)} lb");
+            Recalculate();
+            foreach (string line in QuoteCalculator.CalculationTrace(CurrentInput(), _settings.Prices)) LogDebug(line);
+        }
+        catch (Exception ex)
+        {
+            LogDebug("Calculation trace error: " + ex.Message);
         }
     }
-
-    private static int TrimCount(TrimSelection trim) => trim.Ridges + trim.Gables + trim.Eaves + trim.Endwalls + trim.Sidewalls
-        + trim.Valleys + trim.Transitions + trim.JTrim + trim.DeluxeCorners;
-
-    private static int MiscCount(MiscSelection misc) => misc.OutsideClosures + misc.InsideClosures + misc.ButylTape + misc.Caulk
-        + misc.VentedClosures + misc.UniversalClosures + misc.RedSnips + misc.GreenSnips + misc.BlueSnips + misc.TurboShear
-        + misc.BootCounts.Sum();
 
     private void ShowSettings()
     {
@@ -1218,7 +1241,7 @@ sealed class MainForm : Form
                 e.Cancel = true;
                 return;
             }
-            if (dialog.Choice == UnsavedChoice.QuickSave && !QuickSave())
+            if (dialog.Choice == UnsavedChoice.Save && !SaveQuote())
             {
                 e.Cancel = true;
                 return;
@@ -1348,6 +1371,36 @@ sealed class MainForm : Form
         g.DrawLine(line, 3, 12, 13, 4);
         using var arrow = new Pen(Color.DeepSkyBlue, 2) { EndCap = System.Drawing.Drawing2D.LineCap.ArrowAnchor };
         g.DrawLine(arrow, 4, 3, 8, 8);
+        return image;
+    }
+
+    private static Image BuildNewIcon()
+    {
+        var image = new Bitmap(16, 16);
+        using var g = Graphics.FromImage(image);
+        g.Clear(Color.Transparent);
+        using var paper = new SolidBrush(Color.White);
+        using var fold = new SolidBrush(Color.FromArgb(220, 230, 245));
+        g.FillRectangle(paper, 4, 2, 9, 12);
+        g.FillPolygon(fold, new[] { new Point(10, 2), new Point(13, 5), new Point(10, 5) });
+        g.DrawRectangle(Pens.DimGray, 4, 2, 9, 12);
+        using var plus = new Pen(Color.FromArgb(46, 125, 50), 2);
+        g.DrawLine(plus, 2, 11, 8, 11);
+        g.DrawLine(plus, 5, 8, 5, 14);
+        return image;
+    }
+
+    private static Image BuildOpenIcon()
+    {
+        var image = new Bitmap(16, 16);
+        using var g = Graphics.FromImage(image);
+        g.Clear(Color.Transparent);
+        using var back = new SolidBrush(Color.FromArgb(255, 213, 79));
+        using var front = new SolidBrush(Color.FromArgb(255, 193, 7));
+        g.FillRectangle(back, 2, 5, 12, 8);
+        g.FillRectangle(front, 2, 7, 12, 6);
+        g.FillRectangle(back, 3, 3, 5, 3);
+        g.DrawRectangle(Pens.DarkGoldenrod, 2, 5, 12, 8);
         return image;
     }
 

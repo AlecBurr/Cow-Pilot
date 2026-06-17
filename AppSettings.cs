@@ -21,15 +21,7 @@ sealed class AppSettings
 
 sealed class GeneralSettings
 {
-    public string QuickSaveFolder { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Cow Pilot Estimates");
-
-    public void Normalize()
-    {
-        if (string.IsNullOrWhiteSpace(QuickSaveFolder))
-        {
-            QuickSaveFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Cow Pilot Estimates");
-        }
-    }
+    public void Normalize() { }
 }
 
 sealed class PriceSettings

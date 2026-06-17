@@ -4,8 +4,7 @@ enum UnsavedChoice
 {
     Cancel,
     SaveAs,
-    QuickSave,
-    Close
+    Save
 }
 
 sealed class UnsavedChangesDialog : Form
@@ -32,13 +31,12 @@ sealed class UnsavedChangesDialog : Form
         {
             Dock = DockStyle.Bottom,
             Height = 48,
-            FlowDirection = FlowDirection.RightToLeft,
+            FlowDirection = FlowDirection.LeftToRight,
             Padding = new Padding(8)
         };
-        buttons.Controls.Add(Button("Cancel", UnsavedChoice.Cancel));
-        buttons.Controls.Add(Button("Close", UnsavedChoice.Close));
-        buttons.Controls.Add(Button("Quick Save", UnsavedChoice.QuickSave));
         buttons.Controls.Add(Button("Save As", UnsavedChoice.SaveAs));
+        buttons.Controls.Add(Button("Save", UnsavedChoice.Save));
+        buttons.Controls.Add(Button("Cancel", UnsavedChoice.Cancel));
 
         Controls.Add(message);
         Controls.Add(buttons);

@@ -71,17 +71,7 @@ sealed class SettingsForm : Form
     {
         var page = Page();
         var general = Grid();
-        var folder = new TextBox { Text = _settings.General.QuickSaveFolder, Width = 360 };
-        folder.TextChanged += (_, _) => _settings.General.QuickSaveFolder = folder.Text;
-        var browse = new Button { Text = "Browse...", AutoSize = true };
-        browse.Click += (_, _) =>
-        {
-            using var dialog = new FolderBrowserDialog { SelectedPath = Directory.Exists(folder.Text) ? folder.Text : Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory) };
-            if (dialog.ShowDialog(this) == DialogResult.OK) folder.Text = dialog.SelectedPath;
-        };
-        var folderRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
-        folderRow.Controls.AddRange([folder, browse]);
-        AddRow(general, "Quick save folder", folderRow);
+        AddRow(general, "Quote files", new Label { Text = "Use File > Save or Save As. Quotes save as .cowpilot files.", AutoSize = true });
         AddGroup(page, "General", general);
         return page;
     }
