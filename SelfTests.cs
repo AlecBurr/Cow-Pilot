@@ -51,6 +51,7 @@ static class SelfTests
         Assert(loaded.FormatVersion == AppVersion.SaveFormatVersion, "load format version");
         Assert(loaded.Input.CustomTrim.Pieces[0].Quantity == 2, "custom trim quantity load");
         Assert(loaded.Input.CustomTrim.Pieces[0].Vertices.Count == 3, "custom trim vertices load");
+        AssertCustomTrimAngleEditing();
 
         string releaseJson = """{"version":"v9.8.7","url":"https://github.com/AlecBurr/Cow-Pilot/releases/download/v9.8.7/CowPilot-9.8.7-win-x64.zip"}""";
         Assert(UpdateChecker.TryReadLatestManifest(releaseJson, out string latest, out string? downloadUrl), "update manifest parse");
@@ -67,6 +68,16 @@ static class SelfTests
         var counts = new int[QuoteCalculator.BootCatalog.Length];
         foreach (var value in values) counts[value.Index] = value.Count;
         return counts;
+    }
+
+    private static void AssertCustomTrimAngleEditing()
+    {
+        var trim = new CustomTrimControl();
+        trim.LoadState(new CustomTrimState([new CustomTrimPieceState(1, [new PointF(0, 0), new PointF(10, 0), new PointF(10, 10)])], 64, 0, 0, 1f, 1));
+        trim.UpdateInteriorAngle(1, -90);
+        Assert(trim.State.Pieces[0].Vertices[2].Y > 9.9, "custom trim bender 90");
+        trim.UpdateInteriorAngle(1, 20);
+        Assert(trim.State.Pieces[0].Vertices[2].Y < -3, "custom trim bender past 180 flips side");
     }
 
     private static void Assert(bool condition, string name)

@@ -25,6 +25,9 @@ sealed class CustomTrimControl : Control
     private PointF? _previewPoint;
     private int _drawingPieceIndex = -1;
     private int _selectedPieceIndex = -1;
+    private int _selectedVertexIndex = -1;
+    private int _selectedSegmentIndex = -1;
+    private int _selectedAngleVertexIndex = -1;
     private int _movingPieceIndex = -1;
     private int _rotatingPieceIndex = -1;
     private bool _pickingOrigin;
@@ -66,6 +69,9 @@ sealed class CustomTrimControl : Control
     public int PieceCount => _pieces.Count;
     public IReadOnlyList<CustomTrimPieceState> Pieces => _pieces;
     public IReadOnlyList<PointF> SelectedVertices => SelectedPiece?.Vertices is { } vertices ? vertices : Array.Empty<PointF>();
+    public int SelectedVertexIndex => _selectedVertexIndex;
+    public int SelectedSegmentIndex => _selectedSegmentIndex;
+    public int SelectedAngleVertexIndex => _selectedAngleVertexIndex;
 
     public int SelectedOriginIndex
     {
@@ -113,6 +119,7 @@ sealed class CustomTrimControl : Control
         _pieces.Clear();
         _pieces.AddRange(state.Pieces.Select(CopyPiece));
         _selectedPieceIndex = _pieces.Count == 0 ? -1 : 0;
+        ClearPartSelection();
         _drawingPieceIndex = _selectedPieceIndex;
         _drawingStart = null;
         _previewPoint = null;
@@ -129,6 +136,7 @@ sealed class CustomTrimControl : Control
         var piece = new CustomTrimPieceState(1, []);
         _pieces.Add(piece);
         _selectedPieceIndex = _pieces.Count - 1;
+        ClearPartSelection();
         _drawingPieceIndex = _selectedPieceIndex;
         _drawingStart = null;
         _previewPoint = null;
@@ -139,6 +147,7 @@ sealed class CustomTrimControl : Control
     {
         if (index < 0 || index >= _pieces.Count) return;
         _selectedPieceIndex = index;
+        ClearPartSelection();
         _drawingPieceIndex = -1;
         _drawingStart = null;
         _previewPoint = null;
@@ -146,11 +155,54 @@ sealed class CustomTrimControl : Control
         SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    public void SelectVertex(int index)
+    {
+        if (SelectedPiece == null || index < 0 || index >= SelectedPiece.Vertices.Count) return;
+        _selectedVertexIndex = index;
+        _selectedSegmentIndex = -1;
+        _selectedAngleVertexIndex = IsInteriorVertex(_selectedPieceIndex, index) ? index : -1;
+        ClearDrawing();
+        Invalidate();
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void SelectSegment(int index)
+    {
+        if (SelectedPiece == null || index < 0 || index >= SelectedPiece.Vertices.Count - 1) return;
+        _selectedVertexIndex = -1;
+        _selectedSegmentIndex = index;
+        _selectedAngleVertexIndex = -1;
+        ClearDrawing();
+        Invalidate();
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void SelectAngleVertex(int index)
+    {
+        if (!IsInteriorVertex(_selectedPieceIndex, index)) return;
+        _selectedVertexIndex = index;
+        _selectedSegmentIndex = -1;
+        _selectedAngleVertexIndex = index;
+        ClearDrawing();
+        Invalidate();
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public bool SetSelectedVertexAsOrigin()
+    {
+        if (SelectedPiece == null || _selectedVertexIndex < 0 || _selectedVertexIndex >= SelectedPiece.Vertices.Count) return false;
+        SelectedOriginIndex = _selectedVertexIndex;
+        return true;
+    }
+
     public void AddVertex(PointF point)
     {
         if (SelectedPiece == null) BeginNewPiece();
         SelectedPiece!.Vertices.Add(point);
         SelectedPiece.OriginIndex = Math.Clamp(SelectedPiece.OriginIndex, 0, Math.Max(0, SelectedPiece.Vertices.Count - 1));
+        _selectedVertexIndex = SelectedPiece.Vertices.Count - 1;
+        _selectedSegmentIndex = -1;
+        _selectedAngleVertexIndex = IsInteriorVertex(_selectedPieceIndex, _selectedVertexIndex) ? _selectedVertexIndex : -1;
         _drawingStart = null;
         _previewPoint = null;
         Changed();
@@ -161,6 +213,9 @@ sealed class CustomTrimControl : Control
         if (SelectedPiece == null || index < 0 || index >= SelectedPiece.Vertices.Count) return;
         SelectedPiece.Vertices[index] = point;
         SelectedPiece.OriginIndex = Math.Clamp(SelectedPiece.OriginIndex, 0, Math.Max(0, SelectedPiece.Vertices.Count - 1));
+        _selectedVertexIndex = index;
+        _selectedSegmentIndex = -1;
+        _selectedAngleVertexIndex = IsInteriorVertex(_selectedPieceIndex, index) ? index : -1;
         _drawingStart = null;
         _previewPoint = null;
         Changed();
@@ -175,6 +230,9 @@ sealed class CustomTrimControl : Control
         double radians = angleDegrees * Math.PI / 180.0;
         var end = new PointF((float)(start.X + Math.Cos(radians) * length), (float)(start.Y + Math.Sin(radians) * length));
         SelectedPiece.Vertices.Add(end);
+        _selectedSegmentIndex = SelectedPiece.Vertices.Count - 2;
+        _selectedVertexIndex = -1;
+        _selectedAngleVertexIndex = -1;
         _drawingStart = null;
         _previewPoint = null;
         Changed();
@@ -184,21 +242,20 @@ sealed class CustomTrimControl : Control
     {
         if (SelectedPiece == null) return;
         if (vertexIndex <= 0 || vertexIndex >= SelectedPiece.Vertices.Count - 1) return;
-        interiorDegrees = Math.Clamp(interiorDegrees, 0.001, 180);
         PointF previous = SelectedPiece.Vertices[vertexIndex - 1];
         PointF vertex = SelectedPiece.Vertices[vertexIndex];
         PointF next = SelectedPiece.Vertices[vertexIndex + 1];
         double previousAngle = AngleRadians(vertex, previous);
         double nextAngle = AngleRadians(vertex, next);
-        double currentSweep = NormalizeRadians(nextAngle - previousAngle);
-        double direction = Math.Sign(currentSweep);
-        if (direction == 0) direction = 1;
-        double targetNextAngle = previousAngle + direction * (interiorDegrees * Math.PI / 180.0);
+        double targetNextAngle = previousAngle + NormalizeDegrees(interiorDegrees) * Math.PI / 180.0;
         double delta = NormalizeRadians(targetNextAngle - nextAngle);
         for (int i = vertexIndex + 1; i < SelectedPiece.Vertices.Count; i++)
         {
             SelectedPiece.Vertices[i] = RotatePoint(SelectedPiece.Vertices[i], vertex, delta);
         }
+        _selectedVertexIndex = vertexIndex;
+        _selectedSegmentIndex = -1;
+        _selectedAngleVertexIndex = vertexIndex;
         ClearDrawing();
         Changed();
     }
@@ -219,6 +276,9 @@ sealed class CustomTrimControl : Control
             PointF vertex = SelectedPiece.Vertices[i];
             SelectedPiece.Vertices[i] = new PointF(vertex.X + dx, vertex.Y + dy);
         }
+        _selectedVertexIndex = -1;
+        _selectedSegmentIndex = segmentIndex;
+        _selectedAngleVertexIndex = -1;
         _drawingStart = null;
         _previewPoint = null;
         Changed();
@@ -253,6 +313,7 @@ sealed class CustomTrimControl : Control
             _pieces.RemoveAt(_selectedPieceIndex);
             _selectedPieceIndex = Math.Min(_selectedPieceIndex, _pieces.Count - 1);
         }
+        TrimSelectionToBounds();
         _drawingPieceIndex = -1;
         Changed();
     }
@@ -262,6 +323,7 @@ sealed class CustomTrimControl : Control
         CancelOriginPick();
         _pieces.Clear();
         _selectedPieceIndex = -1;
+        ClearPartSelection();
         _drawingPieceIndex = -1;
         _drawingStart = null;
         _previewPoint = null;
@@ -344,10 +406,23 @@ sealed class CustomTrimControl : Control
         if (e.Button == MouseButtons.Left && _drawingStart == null)
         {
             if (TryStartRotation(e.Location)) return;
+            var vertexHit = NearestVertex(e.Location);
+            if (vertexHit != null)
+            {
+                SelectHitVertex(vertexHit.Value);
+                return;
+            }
+            var segmentHit = NearestSegment(e.Location);
+            if (segmentHit != null)
+            {
+                SelectHitSegment(segmentHit.Value);
+                return;
+            }
             int? pieceHit = HitPieceBounds(e.Location);
-            if (pieceHit != null && NearestVertex(e.Location) == null)
+            if (pieceHit != null)
             {
                 _selectedPieceIndex = pieceHit.Value;
+                ClearPartSelection();
                 _movingPieceIndex = pieceHit.Value;
                 _lastMovePoint = ScreenToModel(e.Location);
                 Invalidate();
@@ -454,24 +529,14 @@ sealed class CustomTrimControl : Control
         PointF snapped = Snap(ScreenToModel(screen));
         if (_drawingStart == null)
         {
-            var hit = NearestVertex(screen);
-            if (hit != null)
-            {
-                _selectedPieceIndex = hit.Value.PieceIndex;
-                _drawingPieceIndex = hit.Value.VertexIndex == _pieces[hit.Value.PieceIndex].Vertices.Count - 1
-                    ? hit.Value.PieceIndex
-                    : CreatePieceFrom(hit.Value.Vertex);
-                _drawingStart = hit.Value.Vertex;
-                _previewPoint = snapped;
-            }
-            else
-            {
-                if (SelectedPiece == null || SelectedPiece.Vertices.Count > 1) BeginNewPiece();
-                SelectedPiece!.Vertices.Add(snapped);
-                _drawingPieceIndex = _selectedPieceIndex;
-                _drawingStart = snapped;
-                _previewPoint = snapped;
-            }
+            if (SelectedPiece == null || SelectedPiece.Vertices.Count > 1) BeginNewPiece();
+            SelectedPiece!.Vertices.Add(snapped);
+            _selectedVertexIndex = SelectedPiece.Vertices.Count - 1;
+            _selectedSegmentIndex = -1;
+            _selectedAngleVertexIndex = -1;
+            _drawingPieceIndex = _selectedPieceIndex;
+            _drawingStart = snapped;
+            _previewPoint = snapped;
         }
         else
         {
@@ -484,19 +549,15 @@ sealed class CustomTrimControl : Control
             {
                 if (piece.Vertices.Count == 0 || Distance(piece.Vertices[^1], _drawingStart.Value) > 0.0001f) piece.Vertices.Add(_drawingStart.Value);
                 piece.Vertices.Add(snapped);
+                _selectedPieceIndex = _drawingPieceIndex;
+                _selectedVertexIndex = -1;
+                _selectedSegmentIndex = piece.Vertices.Count - 2;
+                _selectedAngleVertexIndex = -1;
                 _drawingStart = snapped;
                 _previewPoint = snapped;
             }
         }
         Changed();
-    }
-
-    private int CreatePieceFrom(PointF point)
-    {
-        var piece = new CustomTrimPieceState(SelectedPiece?.Quantity ?? 1, [point]);
-        _pieces.Add(piece);
-        _selectedPieceIndex = _pieces.Count - 1;
-        return _selectedPieceIndex;
     }
 
     private CustomTrimPieceState PieceForDrawing()
@@ -520,6 +581,45 @@ sealed class CustomTrimControl : Control
             }
         }
         return null;
+    }
+
+    private SegmentHit? NearestSegment(Point screen)
+    {
+        for (int pieceIndex = _pieces.Count - 1; pieceIndex >= 0; pieceIndex--)
+        {
+            var vertices = _pieces[pieceIndex].Vertices;
+            for (int segmentIndex = vertices.Count - 2; segmentIndex >= 0; segmentIndex--)
+            {
+                Point from = ModelToScreen(vertices[segmentIndex]);
+                Point to = ModelToScreen(vertices[segmentIndex + 1]);
+                if (DistanceToSegment(screen, from, to) <= 7) return new SegmentHit(pieceIndex, segmentIndex);
+            }
+        }
+        return null;
+    }
+
+    private void SelectHitVertex(VertexHit hit)
+    {
+        _selectedPieceIndex = hit.PieceIndex;
+        _drawingPieceIndex = -1;
+        _selectedVertexIndex = hit.VertexIndex;
+        _selectedSegmentIndex = -1;
+        _selectedAngleVertexIndex = IsInteriorVertex(hit.PieceIndex, hit.VertexIndex) ? hit.VertexIndex : -1;
+        ClearDrawing();
+        Invalidate();
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void SelectHitSegment(SegmentHit hit)
+    {
+        _selectedPieceIndex = hit.PieceIndex;
+        _drawingPieceIndex = -1;
+        _selectedVertexIndex = -1;
+        _selectedSegmentIndex = hit.SegmentIndex;
+        _selectedAngleVertexIndex = -1;
+        ClearDrawing();
+        Invalidate();
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void DrawGrid(Graphics g)
@@ -552,14 +652,15 @@ sealed class CustomTrimControl : Control
             using var pen = PiecePen(p, p == _selectedPieceIndex);
             if (p == _selectedPieceIndex) DrawMarquee(g, piece);
             for (int i = 1; i < piece.Vertices.Count; i++) DrawSegment(g, pen, piece.Vertices[i - 1], piece.Vertices[i], true);
-            if (_preferences.ShowCustomTrimAngleArcs) DrawAngleMarkers(g, piece);
+            if (_preferences.ShowCustomTrimAngleArcs) DrawAngleMarkers(g, piece, p);
             if (piece.Vertices.Count > 0) DrawQuantity(g, piece);
             for (int i = 0; i < piece.Vertices.Count; i++)
             {
                 Point point = ModelToScreen(piece.Vertices[i]);
                 bool selectedOrigin = p == _selectedPieceIndex && i == SelectedOriginIndex;
-                using var brush = new SolidBrush(selectedOrigin ? Color.FromArgb(_preferences.CustomTrimOriginArgb) : VertexColor);
-                float size = _preferences.CustomTrimVertexSize;
+                bool selectedVertex = p == _selectedPieceIndex && i == _selectedVertexIndex;
+                using var brush = new SolidBrush(selectedVertex ? Color.Red : selectedOrigin ? Color.FromArgb(_preferences.CustomTrimOriginArgb) : VertexColor);
+                float size = selectedVertex ? _preferences.CustomTrimVertexSize + 4 : _preferences.CustomTrimVertexSize;
                 g.FillEllipse(brush, point.X - size / 2f, point.Y - size / 2f, size, size);
             }
         }
@@ -693,21 +794,22 @@ sealed class CustomTrimControl : Control
         g.DrawLine(border, tip, new Point(tip.X - 5, tip.Y + 2));
     }
 
-    private void DrawAngleMarkers(Graphics g, CustomTrimPieceState piece)
+    private void DrawAngleMarkers(Graphics g, CustomTrimPieceState piece, int pieceIndex)
     {
         for (int i = 1; i < piece.Vertices.Count - 1; i++)
         {
             Point vertex = ModelToScreen(piece.Vertices[i]);
             Point previous = ModelToScreen(piece.Vertices[i - 1]);
             Point next = ModelToScreen(piece.Vertices[i + 1]);
-            double angle = InteriorAngle(piece.Vertices[i - 1], piece.Vertices[i], piece.Vertices[i + 1]);
+            double angle = BenderAngle(piece.Vertices[i - 1], piece.Vertices[i], piece.Vertices[i + 1]);
             float start = AngleDegrees(vertex, previous);
             float sweep = SweepDegrees(start, AngleDegrees(vertex, next));
             const float radius = 24;
-            using var pen = new Pen(Color.FromArgb(_preferences.CustomTrimSelectedLineArgb), 1.5f) { DashStyle = DashStyle.Dot };
+            bool selected = pieceIndex == _selectedPieceIndex && i == _selectedAngleVertexIndex;
+            using var pen = new Pen(selected ? Color.Red : Color.FromArgb(_preferences.CustomTrimSelectedLineArgb), selected ? 2.5f : 1.5f) { DashStyle = DashStyle.Dot };
             g.DrawArc(pen, vertex.X - radius, vertex.Y - radius, radius * 2, radius * 2, start, sweep);
             string text = $"{Num(angle)} deg";
-            using var brush = new SolidBrush(LabelTextColor);
+            using var brush = new SolidBrush(selected ? Color.Red : LabelTextColor);
             g.DrawString(text, Font, brush, vertex.X + 12, vertex.Y + 12);
         }
     }
@@ -761,6 +863,9 @@ sealed class CustomTrimControl : Control
         {
             _selectedPieceIndex = hit.Value.PieceIndex;
             _drawingPieceIndex = -1;
+            _selectedVertexIndex = hit.Value.VertexIndex;
+            _selectedSegmentIndex = -1;
+            _selectedAngleVertexIndex = IsInteriorVertex(hit.Value.PieceIndex, hit.Value.VertexIndex) ? hit.Value.VertexIndex : -1;
             _pieces[_selectedPieceIndex].OriginIndex = hit.Value.VertexIndex;
             CancelOriginPick();
             Changed();
@@ -869,12 +974,38 @@ sealed class CustomTrimControl : Control
         _drawingStart = null;
         _previewPoint = null;
         _drawingPieceIndex = -1;
+        TrimSelectionToBounds();
         Invalidate();
         return true;
     }
 
+    private void ClearPartSelection()
+    {
+        _selectedVertexIndex = -1;
+        _selectedSegmentIndex = -1;
+        _selectedAngleVertexIndex = -1;
+    }
+
+    private void TrimSelectionToBounds()
+    {
+        if (_selectedPieceIndex >= _pieces.Count) _selectedPieceIndex = _pieces.Count - 1;
+        if (_selectedPieceIndex < 0)
+        {
+            ClearPartSelection();
+            return;
+        }
+        var piece = _pieces[_selectedPieceIndex];
+        if (_selectedVertexIndex >= piece.Vertices.Count) _selectedVertexIndex = -1;
+        if (_selectedSegmentIndex >= piece.Vertices.Count - 1) _selectedSegmentIndex = -1;
+        if (!IsInteriorVertex(_selectedPieceIndex, _selectedAngleVertexIndex)) _selectedAngleVertexIndex = -1;
+    }
+
+    private bool IsInteriorVertex(int pieceIndex, int vertexIndex)
+        => pieceIndex >= 0 && pieceIndex < _pieces.Count && vertexIndex > 0 && vertexIndex < _pieces[pieceIndex].Vertices.Count - 1;
+
     private void Changed()
     {
+        TrimSelectionToBounds();
         Invalidate();
         TrimChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -903,15 +1034,33 @@ sealed class CustomTrimControl : Control
         return new PointF((float)(center.X + x * cos - y * sin), (float)(center.Y + x * sin + y * cos));
     }
 
-    private static double InteriorAngle(PointF previous, PointF vertex, PointF next)
+    private static double DistanceToSegment(Point point, Point from, Point to)
     {
-        double ax = previous.X - vertex.X;
-        double ay = previous.Y - vertex.Y;
-        double bx = next.X - vertex.X;
-        double by = next.Y - vertex.Y;
-        double lengths = Math.Sqrt(ax * ax + ay * ay) * Math.Sqrt(bx * bx + by * by);
-        if (lengths <= 0) return 0;
-        return Math.Acos(Math.Clamp(((ax * bx) + (ay * by)) / lengths, -1, 1)) * 180.0 / Math.PI;
+        double dx = to.X - from.X;
+        double dy = to.Y - from.Y;
+        if (dx == 0 && dy == 0) return Distance(point, from);
+        double t = Math.Clamp(((point.X - from.X) * dx + (point.Y - from.Y) * dy) / (dx * dx + dy * dy), 0, 1);
+        return Distance(point, new Point((int)Math.Round(from.X + t * dx), (int)Math.Round(from.Y + t * dy)));
+    }
+
+    private static double BenderAngle(PointF previous, PointF vertex, PointF next)
+    {
+        double sweep = SignedInteriorSweep(previous, vertex, next);
+        return Math.Abs(Math.Abs(sweep) - 180) < 0.001 ? 0 : 180 + sweep;
+    }
+
+    private static double SignedInteriorSweep(PointF previous, PointF vertex, PointF next)
+    {
+        double previousAngle = Math.Atan2(previous.Y - vertex.Y, previous.X - vertex.X) * 180.0 / Math.PI;
+        double nextAngle = Math.Atan2(next.Y - vertex.Y, next.X - vertex.X) * 180.0 / Math.PI;
+        return NormalizeDegrees(nextAngle - previousAngle);
+    }
+
+    private static double NormalizeDegrees(double angle)
+    {
+        while (angle > 180) angle -= 360;
+        while (angle < -180) angle += 360;
+        return angle;
     }
 
     private static float AngleDegrees(Point center, Point point) => (float)(Math.Atan2(point.Y - center.Y, point.X - center.X) * 180.0 / Math.PI);
@@ -928,5 +1077,6 @@ sealed class CustomTrimControl : Control
     private static string Money(double value) => value.ToString("C", CultureInfo.GetCultureInfo("en-US"));
 
     private readonly record struct VertexHit(int PieceIndex, int VertexIndex, PointF Vertex);
+    private readonly record struct SegmentHit(int PieceIndex, int SegmentIndex);
     private readonly record struct Segment(PointF From, PointF To, double Length);
 }

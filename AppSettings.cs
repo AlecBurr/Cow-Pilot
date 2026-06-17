@@ -22,7 +22,6 @@ sealed class AppSettings
 sealed class GeneralSettings
 {
     public string QuickSaveFolder { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Cow Pilot Estimates");
-    public int AutoRecalculateDelayMs { get; set; } = 650;
 
     public void Normalize()
     {
@@ -30,7 +29,6 @@ sealed class GeneralSettings
         {
             QuickSaveFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Cow Pilot Estimates");
         }
-        AutoRecalculateDelayMs = Math.Clamp(AutoRecalculateDelayMs, 150, 5000);
     }
 }
 

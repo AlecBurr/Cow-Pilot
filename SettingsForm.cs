@@ -82,7 +82,6 @@ sealed class SettingsForm : Form
         var folderRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
         folderRow.Controls.AddRange([folder, browse]);
         AddRow(general, "Quick save folder", folderRow);
-        AddRow(general, "Auto-calculate delay (ms)", Number(_settings.General.AutoRecalculateDelayMs, 150, 5000, 0, value => _settings.General.AutoRecalculateDelayMs = (int)value));
         AddGroup(page, "General", general);
         return page;
     }

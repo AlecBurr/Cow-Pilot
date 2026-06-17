@@ -3,6 +3,6 @@ namespace CowPilot;
 static class AppVersion
 {
     public const string Name = "Cow Pilot";
-    public const string Version = "1.1.5";
+    public const string Version = "1.1.6";
     public const string SaveFormatVersion = "1.0.0";
 }
