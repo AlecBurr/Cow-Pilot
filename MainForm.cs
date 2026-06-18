@@ -71,7 +71,6 @@ sealed class MainForm : Form
         Text = $"{AppVersion.Name} version {AppVersion.Version}";
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? Icon;
         WindowState = FormWindowState.Maximized;
-        MaximizeBox = false;
         MinimumSize = new Size(1100, 700);
 
         _screwButtons =
@@ -212,11 +211,6 @@ sealed class MainForm : Form
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
-        if (WindowState == FormWindowState.Normal)
-        {
-            WindowState = FormWindowState.Maximized;
-            return;
-        }
         PositionMascot();
     }
 
@@ -1040,8 +1034,7 @@ sealed class MainForm : Form
         using var dialog = new UnsavedChangesDialog();
         dialog.ShowDialog(this);
         if (dialog.Choice == UnsavedChoice.Cancel) return false;
-        if (dialog.Choice == UnsavedChoice.SaveAs) return SaveAs();
-        if (dialog.Choice == UnsavedChoice.Save) return SaveQuote();
+        if (dialog.Choice == UnsavedChoice.Yes) return SaveQuote();
         return true;
     }
 
@@ -1236,12 +1229,7 @@ sealed class MainForm : Form
                 e.Cancel = true;
                 return;
             }
-            if (dialog.Choice == UnsavedChoice.SaveAs && !SaveAs())
-            {
-                e.Cancel = true;
-                return;
-            }
-            if (dialog.Choice == UnsavedChoice.Save && !SaveQuote())
+            if (dialog.Choice == UnsavedChoice.Yes && !SaveQuote())
             {
                 e.Cancel = true;
                 return;

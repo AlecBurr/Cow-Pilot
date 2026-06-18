@@ -3,8 +3,8 @@ namespace CowPilot;
 enum UnsavedChoice
 {
     Cancel,
-    SaveAs,
-    Save
+    Yes,
+    No
 }
 
 sealed class UnsavedChangesDialog : Form
@@ -22,7 +22,7 @@ sealed class UnsavedChangesDialog : Form
 
         var message = new Label
         {
-            Text = "This quote has unsaved changes. What would you like to do?",
+            Text = "Would you like to save your work before closing?",
             Dock = DockStyle.Top,
             Height = 48,
             TextAlign = ContentAlignment.MiddleCenter
@@ -34,8 +34,8 @@ sealed class UnsavedChangesDialog : Form
             FlowDirection = FlowDirection.LeftToRight,
             Padding = new Padding(8)
         };
-        buttons.Controls.Add(Button("Save As", UnsavedChoice.SaveAs));
-        buttons.Controls.Add(Button("Save", UnsavedChoice.Save));
+        buttons.Controls.Add(Button("Yes", UnsavedChoice.Yes));
+        buttons.Controls.Add(Button("No", UnsavedChoice.No));
         buttons.Controls.Add(Button("Cancel", UnsavedChoice.Cancel));
 
         Controls.Add(message);
