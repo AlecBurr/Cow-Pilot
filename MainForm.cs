@@ -146,22 +146,29 @@ sealed class MainForm : Form
         var options = new ToolStripMenuItem("Options");
         options.DropDownItems.Add("Settings", null, (_, _) => ShowSettings());
         menu.Items.Add(options);
+
+        var help = new ToolStripMenuItem("Help") { Alignment = ToolStripItemAlignment.Right };
+        help.DropDownItems.Add("Calculator Guide", null, (_, _) => ShowHelpGuide());
+        menu.Items.Add(help);
         return menu;
     }
 
     private Control BuildTopBar()
     {
-        var top = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = false, Margin = Padding.Empty, Padding = Padding.Empty };
+        var top = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 1, RowCount = 2, Margin = Padding.Empty, Padding = Padding.Empty };
+        top.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        top.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         var menu = MainMenuStrip ?? throw new InvalidOperationException("Main menu is not initialized.");
-        menu.Dock = DockStyle.None;
-        top.Controls.Add(menu);
-        top.Controls.Add(BuildToolBar());
+        menu.Dock = DockStyle.Fill;
+        menu.Padding = new Padding(menu.Padding.Left, menu.Padding.Top, _mascot.Width + 20, menu.Padding.Bottom);
+        top.Controls.Add(menu, 0, 0);
+        top.Controls.Add(BuildToolBar(), 0, 1);
         return top;
     }
 
     private ToolStrip BuildToolBar()
     {
-        var toolbar = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden };
+        var toolbar = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden, Dock = DockStyle.Fill };
         toolbar.Items.Add(ToolbarButton(BuildNewIcon(), "New", (_, _) => NewQuote()));
         toolbar.Items.Add(ToolbarButton(BuildOpenIcon(), "Load quote", (_, _) => LoadQuote()));
         var save = new ToolStripButton
@@ -1172,6 +1179,12 @@ sealed class MainForm : Form
         if (_console.IsDisposed) return;
         _console.Show(this);
         _console.BringToFront();
+    }
+
+    private void ShowHelpGuide()
+    {
+        using var guide = new HelpGuideForm();
+        guide.ShowDialog(this);
     }
 
     private void LogDebug(string message) => _console.Log(message);
