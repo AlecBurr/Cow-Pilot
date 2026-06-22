@@ -57,6 +57,8 @@ version and only shows a message if one exists. It does not download or install
 updates.
 "@ | Set-Content -LiteralPath (Join-Path $publishDir "README-FIRST.txt")
 
+Copy-Item -LiteralPath (Join-Path $repoRoot "README.md") -Destination (Join-Path $publishDir "README.md") -Force
+
 Compress-Archive -Path (Join-Path $publishDir "*") -DestinationPath $zipPath -Force
 
 @{
